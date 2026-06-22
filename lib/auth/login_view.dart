@@ -5,6 +5,7 @@
 //  phone → code → password → (registration). Port of the Swift `LoginView`.
 //
 
+import 'package:dlibphonenumber/dlibphonenumber.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -39,30 +40,22 @@ class _LoginViewState extends State<LoginView> {
     super.dispose();
   }
 
-  /// Reduces input to `+<digits>` and groups the national part for readability.
+  /// Formats the input as `+<cc> <national groups>` via libphonenumber's
+  /// as-you-type formatter (country-specific grouping). Re-runs from scratch on
+  /// each change so paste/delete reformat correctly.
   static String _formatAsYouType(String input) {
     final digits = input.replaceAll(RegExp(r'[^0-9]'), '');
     if (digits.isEmpty) return '+';
-    final country = Country.match(digits);
-    if (country == null) return '+$digits';
-    final national = digits.substring(country.dial.length);
-    final buf = StringBuffer('+${country.dial}');
-    if (national.isNotEmpty) {
-      buf.write(' ');
-      // group 3-4-4-4
-      var i = 0;
-      final sizes = [3, 4, 4, 4, 4];
-      var s = 0;
-      while (i < national.length) {
-        final size = s < sizes.length ? sizes[s] : 4;
-        final end = (i + size).clamp(0, national.length);
-        buf.write(national.substring(i, end));
-        if (end < national.length) buf.write(' ');
-        i = end;
-        s++;
+    try {
+      final formatter = PhoneNumberUtil.instance.getAsYouTypeFormatter('US');
+      var out = formatter.inputDigit('+');
+      for (final ch in digits.split('')) {
+        out = formatter.inputDigit(ch);
       }
+      return out.trim();
+    } catch (_) {
+      return '+$digits';
     }
-    return buf.toString();
   }
 
   void _selectCountry(Country country) {
@@ -142,10 +135,8 @@ class _LoginViewState extends State<LoginView> {
                 ),
               ],
             ),
-            child: const Icon(
-              Icons.send_rounded,
-              size: 44,
-              color: Colors.white,
+            child: const Center(
+              child: Text('🐧', style: TextStyle(fontSize: 48, height: 1.0)),
             ),
           ),
           const SizedBox(height: 14),
