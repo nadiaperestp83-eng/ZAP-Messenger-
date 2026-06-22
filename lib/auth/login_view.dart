@@ -480,10 +480,12 @@ class _InputFieldState extends State<InputField> {
             child: TextField(
               controller: widget.controller,
               obscureText: _obscure,
-              // Force a full keyboard for secure fields so they're never numeric.
+              // Force a full QWERTY keyboard for secure fields so they're never
+              // numeric. (visiblePassword can render numeric-only on some Android
+              // IMEs; plain text + obscureText is a reliable full keyboard.)
               keyboardType:
                   widget.keyboardType ??
-                  (widget.secure ? TextInputType.visiblePassword : null),
+                  (widget.secure ? TextInputType.text : null),
               inputFormatters: widget.inputFormatters,
               onChanged: widget.onChanged,
               autocorrect: false,
