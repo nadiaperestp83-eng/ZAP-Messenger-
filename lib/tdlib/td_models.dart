@@ -181,6 +181,7 @@ class ChatMessage {
     this.senderName,
     this.isService = false,
     this.isCall = false,
+    this.contentType,
     this.senderId,
     this.senderPhoto,
     this.image,
@@ -206,6 +207,10 @@ class ChatMessage {
   String? senderName;
   bool isService;
   bool isCall; // messageCall — a call log; not reactable
+  /// Raw TDLib content @type (messageText / messagePhoto / messageAudio / …).
+  /// Kept so we can distinguish kinds the lossy media fields can't (e.g. a
+  /// photo vs a video-thumb, or plain text vs an audio/poll placeholder).
+  String? contentType;
   int? senderId;
   TdFileRef? senderPhoto;
   TdFileRef? image; // photo / sticker / video-thumb / gif
@@ -233,6 +238,18 @@ class ChatMessage {
   String? forwardOrigin; // name of the original author when forwarded
   int? forwardFromUserId; // origin user, resolved lazily to forwardOrigin
   int? forwardFromChatId; // origin chat/channel, resolved lazily
+
+  /// A plain text message (messageText) — not an audio/poll/contact placeholder.
+  bool get isPlainText => contentType == 'messageText';
+
+  /// A real photo (messagePhoto) — not a sticker / GIF / video thumbnail, all
+  /// of which also set [image].
+  bool get isPhoto => contentType == 'messagePhoto';
+
+  /// Whether the "+1" (复读) quick-repeat may apply to this kind at all: only
+  /// plain text and photos. Audio, voice, location, stickers, polls, files,
+  /// videos, contacts and call logs are excluded.
+  bool get canRepeat => isPlainText || isPhoto;
 }
 
 class MessageDocument {
@@ -442,6 +459,7 @@ abstract final class TDParse {
         date: date,
         isService: service,
         isCall: isCall,
+        contentType: content?.type,
         senderId: senderId,
         image: media.image,
         imageWidth: media.width,

@@ -131,10 +131,17 @@ class _ChatViewState extends State<ChatView> {
     if (index != messages.length - 1 || index == 0) return false;
     final a = messages[index], b = messages[index - 1];
     if (a.isService || b.isService) return false;
-    if (a.image != null || a.document != null) return false;
-    if (b.image != null || b.document != null) return false;
-    final ta = a.text.trim(), tb = b.text.trim();
-    return ta.isNotEmpty && ta == tb;
+    // 复读 (+1) only echoes identical plain-text OR identical photos. Audio,
+    // voice, location, stickers, polls, files, videos, contacts and call logs
+    // are never repeatable — even when their placeholder text happens to match.
+    if (a.isPlainText && b.isPlainText) {
+      final ta = a.text.trim(), tb = b.text.trim();
+      return ta.isNotEmpty && ta == tb;
+    }
+    if (a.isPhoto && b.isPhoto) {
+      return a.image != null && b.image != null && a.image!.id == b.image!.id;
+    }
+    return false;
   }
 
   void _openImage(ChatMessage message) {

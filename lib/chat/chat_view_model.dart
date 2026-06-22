@@ -371,12 +371,24 @@ class ChatViewModel extends ChangeNotifier {
     });
   }
 
-  /// Re-sends the same text (the "+1" quick repeat). Text messages only.
+  /// Re-sends the same content (the "+1" quick repeat) — only plain text and
+  /// photos; the badge that calls this is gated to those kinds too.
   void repeatMessage(ChatMessage message) {
-    final text = message.text.trim();
-    if (text.isEmpty || message.image != null || message.document != null) {
+    // Photo: send a clean copy (forwardMessages send_copy drops the "转发"
+    // header and works regardless of the original file's upload state).
+    if (message.isPhoto && message.image != null) {
+      _client.send({
+        '@type': 'forwardMessages',
+        'chat_id': chatId,
+        'from_chat_id': chatId,
+        'message_ids': [message.id],
+        'send_copy': true,
+      });
       return;
     }
+    if (!message.isPlainText) return;
+    final text = message.text.trim();
+    if (text.isEmpty) return;
     _client.send({
       '@type': 'sendMessage',
       'chat_id': chatId,
