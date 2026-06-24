@@ -63,8 +63,12 @@ if [ ! -d "ios/tdjson/tdjson.xcframework" ]; then
 fi
 ls -d ios/tdjson/tdjson.xcframework
 
-# --- Flutter iOS build inputs (Generated.xcconfig, ephemeral SPM package) ----
+# --- Flutter iOS build inputs (Generated.xcconfig, plugin pods) --------------
+# Keep Swift Package Manager OFF: the project is CocoaPods-only on purpose (SPM
+# produced App Store IPAs missing the SwiftSupport folder → ITMS-90426). A fresh
+# runner defaults SPM on, so disable it before generating the project.
 echo "▸ generating Flutter iOS build inputs"
+flutter config --no-enable-swift-package-manager
 flutter precache --ios
 flutter pub get
 flutter build ios --config-only --release
