@@ -24,13 +24,15 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Mithka needs the camera to take photos.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Mithka needs your location to share where you are.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Mithka needs your location to share where you are.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Mithka needs your location to share where you are.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Mithka needs the microphone to record voice messages.</string>
