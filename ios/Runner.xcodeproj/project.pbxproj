@@ -211,6 +211,7 @@
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
 				5E54E8582FECB8F0007D5001 /* Package tdjson dSYM */,
 				DD25322E3CFF124210014386 /* [CP] Embed Pods Frameworks */,
+				5E54E8592FECB8F1007D5001 /* Embed Swift Runtime Libs */,
 				30D0F1B1134481284A4524FE /* [CP] Copy Pods Resources */,
 			);
 			buildRules = (
@@ -355,6 +356,24 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "\"${SRCROOT}/../scripts/package-tdjson-dsym.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		5E54E8592FECB8F1007D5001 /* Embed Swift Runtime Libs */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${SRCROOT}/../scripts/embed-swift-runtime-libs.sh",
+			);
+			name = "Embed Swift Runtime Libs";
+			outputPaths = (
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/libswiftCore.dylib",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/../scripts/embed-swift-runtime-libs.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
 		68405FB96D6C951DBD039125 /* [CP] Check Pods Manifest.lock */ = {
@@ -529,6 +548,7 @@
 					DEVELOPMENT_TEAM = 7P8CLHDH5G;
 					ENABLE_BITCODE = NO;
 					EMBEDDED_CONTENT_CONTAINS_SWIFT = YES;
+					FLUTTER_BUILD_NAME = 0.1.17;
 					FRAMEWORK_SEARCH_PATHS = (
 						"$(inherited)",
 						"$(PROJECT_DIR)/tdjson",
@@ -733,6 +753,7 @@
 					DEVELOPMENT_TEAM = 7P8CLHDH5G;
 					ENABLE_BITCODE = NO;
 					EMBEDDED_CONTENT_CONTAINS_SWIFT = YES;
+					FLUTTER_BUILD_NAME = 0.1.17;
 					FRAMEWORK_SEARCH_PATHS = (
 						"$(inherited)",
 						"$(PROJECT_DIR)/tdjson",
@@ -769,6 +790,7 @@
 					DEVELOPMENT_TEAM = 7P8CLHDH5G;
 					ENABLE_BITCODE = NO;
 					EMBEDDED_CONTENT_CONTAINS_SWIFT = YES;
+					FLUTTER_BUILD_NAME = 0.1.17;
 					FRAMEWORK_SEARCH_PATHS = (
 						"$(inherited)",
 						"$(PROJECT_DIR)/tdjson",
