@@ -129,7 +129,6 @@ class _MainTabViewState extends State<MainTabView> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = context.watch<ThemeController>();
     return MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: _tabBar),
@@ -147,9 +146,7 @@ class _MainTabViewState extends State<MainTabView> {
           },
           child: Stack(
             children: [
-              theme.tabBarStyle == TabBarStyle.system
-                  ? _systemTabs()
-                  : _classicTabs(),
+              _classicTabs(),
               _drawerOverlay(),
               // Full-screen call HUD over everything when a call is active.
               Consumer<CallManager>(
@@ -206,32 +203,6 @@ class _MainTabViewState extends State<MainTabView> {
           },
         ),
       ],
-    );
-  }
-
-  // MARK: - System tab bar
-
-  Widget _systemTabs() {
-    final c = context.colors;
-    return Scaffold(
-      body: _stack(),
-      bottomNavigationBar: Consumer<dc.TabBarVisibility>(
-        builder: (context, vis, _) {
-          if (vis.depth(_selection) > 0) return const SizedBox.shrink();
-          return BottomNavigationBar(
-            currentIndex: _selection,
-            onTap: _select,
-            type: BottomNavigationBarType.fixed,
-            backgroundColor: c.navBar,
-            selectedItemColor: AppTheme.brand,
-            unselectedItemColor: c.textTertiary,
-            items: [
-              for (final t in _tabs)
-                BottomNavigationBarItem(icon: Icon(sfIcon(t.$2)), label: t.$1),
-            ],
-          );
-        },
-      ),
     );
   }
 

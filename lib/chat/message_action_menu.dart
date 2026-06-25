@@ -15,6 +15,7 @@ import 'emoji_store.dart';
 
 enum MessageAction {
   copy('doc', '复制'),
+  edit('pencil', '编辑'),
   reply('arrowshape.turn.up.left', '引用'),
   forward('arrowshape.turn.up.left', '转发'),
   save('star.fill', '收藏'),
@@ -46,12 +47,18 @@ class MessageActionMenu extends StatelessWidget {
       message.document == null &&
       message.animatedSticker == null;
 
+  bool get _isEditableTextMessage =>
+      message.contentType == 'messageText' && message.text.isNotEmpty;
+
   List<MessageAction> get _actions {
     // Call logs / special messages: only 删除 (no copy/reply/forward/react).
     if (message.isCall) return [MessageAction.delete];
     final result = <MessageAction>[];
     if (_isTextMessage && message.text.isNotEmpty) {
       result.add(MessageAction.copy);
+      if (message.isOutgoing && _isEditableTextMessage) {
+        result.add(MessageAction.edit);
+      }
     }
     result.add(MessageAction.reply);
     result.add(MessageAction.forward);

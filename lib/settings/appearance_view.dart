@@ -52,18 +52,6 @@ class AppearanceView extends StatelessWidget {
                 _label(context, '主题颜色'),
                 _colorCard(context, theme),
                 const SizedBox(height: AppSpacing.xl),
-                _label(context, '标签栏样式'),
-                _card(context, [
-                  for (final s in TabBarStyle.values)
-                    _choiceRow(
-                      context,
-                      s.icon,
-                      s.label,
-                      theme.tabBarStyle == s,
-                      () => theme.tabBarStyle = s,
-                    ),
-                ]),
-                const SizedBox(height: AppSpacing.xl),
                 _label(context, '显示'),
                 _card(context, [
                   _toggleRow(

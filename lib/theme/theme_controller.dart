@@ -1,9 +1,9 @@
 //
 //  theme_controller.dart
 //
-//  Drives the app-wide appearance (跟随系统 / 浅色 / 深色), bottom tab-bar style,
-//  text scale, and chat appearance preferences. Values are persisted in
-//  SharedPreferences and applied through providers at the app root.
+//  Drives the app-wide appearance (跟随系统 / 浅色 / 深色), text scale, and chat
+//  appearance preferences. Values are persisted in SharedPreferences and
+//  applied through providers at the app root.
 //
 
 import 'package:flutter/material.dart';
@@ -27,16 +27,6 @@ enum AppearanceMode {
   };
 }
 
-/// Classic flat bar (default) or the system tab bar.
-enum TabBarStyle {
-  classic('经典', Icons.view_week),
-  system('系统', Icons.auto_awesome);
-
-  const TabBarStyle(this.label, this.icon);
-  final String label;
-  final IconData icon;
-}
-
 enum UnreadBadgeMode {
   messages('未读消息数', Icons.mark_chat_unread),
   chats('未读会话数', Icons.forum);
@@ -51,10 +41,6 @@ class ThemeController extends ChangeNotifier {
     _mode = AppearanceMode.values.firstWhere(
       (m) => m.name == _prefs.getString(_modeKey),
       orElse: () => AppearanceMode.system,
-    );
-    _tabBarStyle = TabBarStyle.values.firstWhere(
-      (s) => s.name == _prefs.getString(_tabKey),
-      orElse: () => TabBarStyle.classic, // flat bar by default
     );
     _brandColor = Color(
       _prefs.getInt(_brandKey) ?? (0xFF000000 | AppTheme.defaultBrand),
@@ -81,7 +67,6 @@ class ThemeController extends ChangeNotifier {
   }
 
   static const _modeKey = 'appearanceMode';
-  static const _tabKey = 'tabBarStyle';
   static const _brandKey = 'brandColor';
   static const _fontKey = 'fontScale';
   static const _interfaceScaleKey = 'interfaceScale';
@@ -103,7 +88,6 @@ class ThemeController extends ChangeNotifier {
 
   final SharedPreferences _prefs;
   late AppearanceMode _mode;
-  late TabBarStyle _tabBarStyle;
   late Color _brandColor;
   late double _fontScale;
   late double _interfaceScale;
@@ -119,7 +103,6 @@ class ThemeController extends ChangeNotifier {
   late UnreadBadgeMode _unreadBadgeMode;
 
   AppearanceMode get mode => _mode;
-  TabBarStyle get tabBarStyle => _tabBarStyle;
   ThemeMode get themeMode => _mode.themeMode;
   Color get brandColor => _brandColor;
   bool get circularGroupAvatars => _circularGroupAvatars;
@@ -144,12 +127,6 @@ class ThemeController extends ChangeNotifier {
   set mode(AppearanceMode value) {
     _mode = value;
     _prefs.setString(_modeKey, value.name);
-    notifyListeners();
-  }
-
-  set tabBarStyle(TabBarStyle value) {
-    _tabBarStyle = value;
-    _prefs.setString(_tabKey, value.name);
     notifyListeners();
   }
 

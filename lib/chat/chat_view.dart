@@ -15,6 +15,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../call/call_manager.dart';
+import '../components/confirm_dialog.dart';
 import '../components/photo_avatar.dart';
 import '../components/sf_symbols.dart';
 import '../components/ui_components.dart';
@@ -22,6 +23,7 @@ import '../profile/profile_detail_view.dart';
 import '../theme/app_theme.dart';
 import '../theme/theme_controller.dart';
 import '../tdlib/td_models.dart';
+import '../settings/edit_field_view.dart';
 import 'chat_info_view.dart';
 import 'chat_input_bar.dart';
 import 'chat_picker_view.dart';
@@ -306,11 +308,13 @@ class _ChatViewState extends State<ChatView> {
     );
   }
 
-  void _perform(MessageAction action, ChatMessage message) {
+  Future<void> _perform(MessageAction action, ChatMessage message) async {
     setState(() => _actionTarget = null);
     switch (action) {
       case MessageAction.copy:
         Clipboard.setData(ClipboardData(text: message.text));
+      case MessageAction.edit:
+        _editMessage(message);
       case MessageAction.reply:
         _vm.setReply(message);
       case MessageAction.forward:
@@ -331,8 +335,36 @@ class _ChatViewState extends State<ChatView> {
           );
         }
       case MessageAction.delete:
+        final confirmed = await confirmDialog(
+          context,
+          title: '删除消息？',
+          message: '确定要删除这条消息吗？',
+          confirmText: '删除',
+          destructive: true,
+        );
+        if (!mounted || !confirmed) return;
         _vm.deleteMessage(message.id);
     }
+  }
+
+  Future<void> _editMessage(ChatMessage message) async {
+    final edited = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => EditFieldView(
+          title: '编辑消息',
+          initial: message.text,
+          hint: '消息',
+          multiline: true,
+          maxLength: 4096,
+        ),
+      ),
+    );
+    if (!mounted || edited == null || edited == message.text) return;
+    if (edited.trim().isEmpty) {
+      showToast(context, '消息不能为空');
+      return;
+    }
+    _vm.editMessageText(message.id, edited);
   }
 
   void _openSenderProfile(ChatMessage m) {

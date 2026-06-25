@@ -14,9 +14,11 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app/content_view.dart';
+import 'app/app_navigator.dart';
 import 'auth/account_store.dart';
 import 'auth/auth_manager.dart';
 import 'components/drawer_controller.dart' as dc;
+import 'notifications/notification_controller.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_controller.dart';
 
@@ -52,6 +54,7 @@ class _MithkaAppState extends State<MithkaApp> {
   void initState() {
     super.initState();
     _auth.start();
+    NotificationController.shared.start();
   }
 
   ThemeData _themeData(Brightness brightness) {
@@ -84,6 +87,7 @@ class _MithkaAppState extends State<MithkaApp> {
       child: Consumer2<ThemeController, AccountStore>(
         builder: (context, theme, accounts, _) {
           return MaterialApp(
+            navigatorKey: appNavigatorKey,
             title: 'Mithka',
             debugShowCheckedModeBanner: false,
             theme: _themeData(Brightness.light),

@@ -32,10 +32,14 @@ class SharedMediaView extends StatefulWidget {
     required this.chatId,
     required this.title,
     this.initialTab = 0,
+    this.displayTitle = '聊天文件',
+    this.lockedTab = false,
   });
   final int chatId;
   final String title;
   final int initialTab; // 0 图片视频, 1 文件, 2 链接, 3 语音
+  final String displayTitle;
+  final bool lockedTab;
 
   @override
   State<SharedMediaView> createState() => _SharedMediaViewState();
@@ -102,7 +106,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
       body: Column(
         children: [
           _header(),
-          _tabStrip(),
+          if (!widget.lockedTab) _tabStrip(),
           Expanded(child: _body()),
         ],
       ),
@@ -138,7 +142,7 @@ class _SharedMediaViewState extends State<SharedMediaView> {
               ),
             ),
             Text(
-              '聊天文件',
+              widget.displayTitle,
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,

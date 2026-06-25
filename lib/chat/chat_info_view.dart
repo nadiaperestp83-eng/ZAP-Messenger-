@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 
+import '../components/confirm_dialog.dart';
 import '../components/icon_grid.dart';
 import '../components/photo_avatar.dart';
 import '../components/sf_symbols.dart';
@@ -23,6 +24,8 @@ import '../theme/theme_controller.dart';
 import '../profile/qr_code_view.dart';
 import 'add_members_view.dart';
 import 'chat_members_view.dart';
+import 'group_management_view.dart';
+import 'pinned_messages_view.dart';
 import 'chat_search_view.dart';
 import 'shared_media_view.dart';
 
@@ -92,6 +95,10 @@ class _ChatInfoViewState extends State<ChatInfoView> {
                 ],
                 const SizedBox(height: 14),
                 _rowsCard(),
+                if (_vm.isGroup) ...[
+                  const SizedBox(height: 14),
+                  _groupAppsCard(),
+                ],
                 const SizedBox(height: 14),
                 _togglesCard(),
                 const SizedBox(height: 14),
@@ -340,8 +347,6 @@ class _ChatInfoViewState extends State<ChatInfoView> {
       child: Column(
         children: [
           _infoRow(
-            'magnifyingglass',
-            AppTheme.brand,
             '查找聊天记录',
             () => Navigator.of(context).push(
               MaterialPageRoute(
@@ -350,24 +355,43 @@ class _ChatInfoViewState extends State<ChatInfoView> {
               ),
             ),
           ),
-          const InsetDivider(leadingInset: 52),
-          _infoRow(
-            _vm.isGroup ? 'photo.fill' : 'folder.fill',
-            const Color(0xFF16B0A0),
-            _vm.isGroup ? '群相册' : '文件',
-            () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) =>
-                    SharedMediaView(chatId: widget.chatId, title: widget.title),
+          if (!_vm.isGroup) ...[
+            const InsetDivider(leadingInset: 14),
+            _infoRow(
+              '文件',
+              () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => SharedMediaView(
+                    chatId: widget.chatId,
+                    title: widget.title,
+                    initialTab: 1,
+                    displayTitle: '文件',
+                    lockedTab: true,
+                  ),
+                ),
               ),
             ),
-          ),
+          ],
+          if (_vm.isGroup && _vm.canManageGroup) ...[
+            const InsetDivider(leadingInset: 14),
+            _infoRow(
+              '管理群',
+              () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => GroupManagementView(
+                    chatId: widget.chatId,
+                    title: _vm.title,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _infoRow(String icon, Color color, String title, VoidCallback onTap) {
+  Widget _infoRow(String title, VoidCallback onTap) {
     final c = context.colors;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -378,21 +402,125 @@ class _ChatInfoViewState extends State<ChatInfoView> {
           padding: const EdgeInsets.symmetric(horizontal: 14),
           child: Row(
             children: [
-              Container(
-                width: 26,
-                height: 26,
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Icon(sfIcon(icon), size: 14, color: Colors.white),
-              ),
-              const SizedBox(width: 12),
               Text(title, style: TextStyle(fontSize: 15, color: c.textPrimary)),
               const Spacer(),
               Icon(sfIcon('chevron.right'), size: 14, color: c.textTertiary),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _groupAppsCard() {
+    final c = context.colors;
+    return Container(
+      decoration: _card,
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  '群应用',
+                  style: TextStyle(fontSize: 15, color: c.textPrimary),
+                ),
+                const Spacer(),
+                Icon(sfIcon('chevron.right'), size: 14, color: c.textTertiary),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                _groupAppItem(
+                  icon: 'folder.fill',
+                  color: const Color(0xFFFFB300),
+                  label: '文件',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => SharedMediaView(
+                        chatId: widget.chatId,
+                        title: widget.title,
+                        initialTab: 1,
+                        displayTitle: '群文件',
+                        lockedTab: true,
+                      ),
+                    ),
+                  ),
+                ),
+                _groupAppItem(
+                  icon: 'photo.fill',
+                  color: const Color(0xFF15A7F7),
+                  label: '相册',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => SharedMediaView(
+                        chatId: widget.chatId,
+                        title: widget.title,
+                        initialTab: 0,
+                        displayTitle: '群相册',
+                        lockedTab: true,
+                      ),
+                    ),
+                  ),
+                ),
+                _groupAppItem(
+                  icon: 'star.fill',
+                  color: const Color(0xFF18C26E),
+                  label: '精华消息',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => PinnedMessagesView(
+                        chatId: widget.chatId,
+                        title: widget.title,
+                      ),
+                    ),
+                  ),
+                ),
+                const Expanded(child: SizedBox.shrink()),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _groupAppItem({
+    required String icon,
+    required Color color,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    final c = context.colors;
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(sfIcon(icon), size: 22, color: color),
+            ),
+            const SizedBox(height: 7),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 13, color: c.textSecondary),
+            ),
+          ],
         ),
       ),
     );
@@ -438,7 +566,7 @@ class _ChatInfoViewState extends State<ChatInfoView> {
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
-          _destructiveRow('清空聊天记录', _vm.clearHistory),
+          _destructiveRow('清空聊天记录', _clearHistory),
           // Only a confirmed member can quit — hide 退出 for non-joined groups.
           if (_vm.isGroup && _vm.isMember) ...[
             const InsetDivider(leadingInset: 0),
@@ -467,6 +595,27 @@ class _ChatInfoViewState extends State<ChatInfoView> {
       ),
     );
   }
+
+  Future<void> _clearHistory() async {
+    final first = await confirmDialog(
+      context,
+      title: '清空聊天记录？',
+      message: '这会删除本地聊天记录，但不会退出聊天。',
+      confirmText: '清空',
+      destructive: true,
+    );
+    if (!mounted || !first) return;
+    final second = await confirmDialog(
+      context,
+      title: '再次确认',
+      message: '清空后当前设备上的记录将不可恢复。',
+      confirmText: '确认清空',
+      destructive: true,
+    );
+    if (!mounted || !second) return;
+    _vm.clearHistory();
+    Navigator.of(context).pop();
+  }
 }
 
 class ChatInfoViewModel extends ChangeNotifier {
@@ -485,6 +634,7 @@ class ChatInfoViewModel extends ChangeNotifier {
   List<ChatMember> members = [];
   bool canInvite = false;
   bool canRemove = false;
+  bool canManageGroup = false;
   bool isMember = false; // confirmed member → may quit; false hides 退出
   bool _loaded = false;
 
@@ -575,17 +725,21 @@ class ChatInfoViewModel extends ChangeNotifier {
         case 'chatMemberStatusCreator':
           canInvite = true;
           canRemove = true;
+          canManageGroup = true;
         case 'chatMemberStatusAdministrator':
           final rights = status?.obj('rights');
           canInvite = rights?.boolean('can_invite_users') ?? false;
           canRemove = rights?.boolean('can_restrict_members') ?? false;
+          canManageGroup = true;
         default:
           canInvite = defaultInvite;
           canRemove = false;
+          canManageGroup = false;
       }
     } catch (_) {
       canInvite = defaultInvite;
       canRemove = false;
+      canManageGroup = false;
       isMember = false;
     }
     notifyListeners();

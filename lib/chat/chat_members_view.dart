@@ -102,17 +102,10 @@ class _ChatMembersViewState extends State<ChatMembersView> {
       if (mid?.type != 'messageSenderUser') continue;
       final uid = mid?.int64('user_id');
       if (uid == null) continue;
-      final status = entry.obj('status');
-      MemberRole? role;
-      switch (status?.type) {
-        case 'chatMemberStatusCreator':
-          role = MemberRole.owner;
-        case 'chatMemberStatusAdministrator':
-          role = MemberRole.admin;
-      }
-      final ct = status?.str('custom_title');
-      final title = (ct?.trim().isNotEmpty ?? false) ? ct!.trim() : null;
-      role ??= title == null ? null : MemberRole.member;
+      var status = entry.obj('status');
+      var role = _memberRole(status);
+      final title = _memberTitle(entry, status);
+      role ??= MemberRole.member;
       try {
         final user = await TdClient.shared.query({
           '@type': 'getUser',
@@ -271,5 +264,30 @@ class _ChatMembersViewState extends State<ChatMembersView> {
         ),
       ),
     );
+  }
+
+  String? _memberTitle(
+    Map<String, dynamic> member,
+    Map<String, dynamic>? status,
+  ) {
+    final raw =
+        status?.str('custom_title') ??
+        member.str('custom_title') ??
+        member.str('tag') ??
+        status?.str('title') ??
+        member.str('title');
+    final title = raw?.trim();
+    return title == null || title.isEmpty ? null : title;
+  }
+
+  MemberRole? _memberRole(Map<String, dynamic>? status) {
+    switch (status?.type) {
+      case 'chatMemberStatusCreator':
+        return MemberRole.owner;
+      case 'chatMemberStatusAdministrator':
+        return MemberRole.admin;
+      default:
+        return null;
+    }
   }
 }

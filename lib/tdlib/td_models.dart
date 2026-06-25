@@ -515,6 +515,7 @@ abstract final class TDParse {
         callDuration: callDuration,
         contentType: content?.type,
         senderId: senderId,
+        senderTitle: _cleanString(message.str('sender_tag')),
         mediaAlbumId: message.int64('media_album_id') ?? 0,
         image: media.image,
         imageWidth: media.width,
@@ -538,6 +539,11 @@ abstract final class TDParse {
       ..forwardOrigin = fwdName
       ..forwardFromUserId = fwdUserId
       ..forwardFromChatId = fwdChatId;
+  }
+
+  static String? _cleanString(String? value) {
+    final text = value?.trim();
+    return text == null || text.isEmpty ? null : text;
   }
 
   /// Parses message.interaction_info.reactions into reaction buckets.

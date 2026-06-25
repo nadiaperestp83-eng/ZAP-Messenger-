@@ -644,9 +644,27 @@ class ChatViewModel extends ChangeNotifier {
       'message_ids': [id],
       'revoke': true,
     });
-    messages.removeWhere((m) => m.id == id);
-    if (replyTo?.id == id) replyTo = null;
-    notifyListeners();
+    _removeMessages([id]);
+  }
+
+  void editMessageText(int id, String text) {
+    final value = text.trim();
+    if (value.isEmpty) return;
+    _client.send({
+      '@type': 'editMessageText',
+      'chat_id': chatId,
+      'message_id': id,
+      'input_message_content': {
+        '@type': 'inputMessageText',
+        'text': {'@type': 'formattedText', 'text': value, 'entities': []},
+        'link_preview_options': {
+          '@type': 'linkPreviewOptions',
+          'is_disabled': false,
+        },
+        'clear_draft': false,
+      },
+    });
+    _replaceText(id, value, edited: true);
   }
 
   // MARK: - Paging
@@ -991,6 +1009,10 @@ class ChatViewModel extends ChangeNotifier {
         if (messageId == null || content == null) return;
         _replaceText(messageId, TDParse.messageText(content));
 
+      case 'updateDeleteMessages':
+        if (update.int64('chat_id') != chatId) return;
+        _removeMessages(update.int64Array('message_ids') ?? const <int>[]);
+
       case 'updateChatReadOutbox':
         if (update.int64('chat_id') != chatId) return;
         lastReadOutboxId =
@@ -1244,10 +1266,19 @@ class ChatViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _replaceText(int messageId, String text) {
+  void _replaceText(int messageId, String text, {bool edited = false}) {
     final index = messages.indexWhere((m) => m.id == messageId);
     if (index < 0) return;
     messages[index].text = text;
+    if (edited) messages[index].isEdited = true;
+    notifyListeners();
+  }
+
+  void _removeMessages(List<int> ids) {
+    if (ids.isEmpty) return;
+    final removed = ids.toSet();
+    messages.removeWhere((m) => removed.contains(m.id));
+    if (replyTo != null && removed.contains(replyTo!.id)) replyTo = null;
     notifyListeners();
   }
 
@@ -1257,7 +1288,7 @@ class ChatViewModel extends ChangeNotifier {
       if (m.senderId != senderId || m.isOutgoing) continue;
       if (m.senderName == info.name &&
           m.senderRole == info.role &&
-          m.senderTitle == info.title &&
+          m.senderTitle == (info.title ?? m.senderTitle) &&
           m.senderIsPremium == info.isPremium &&
           m.senderAccentColorId == info.accentColorId &&
           m.senderEmojiStatusId == info.emojiStatusId) {
@@ -1266,7 +1297,7 @@ class ChatViewModel extends ChangeNotifier {
       m.senderName = info.name;
       m.senderPhoto = info.photo;
       m.senderRole = info.role;
-      m.senderTitle = info.title;
+      m.senderTitle = info.title ?? m.senderTitle;
       m.senderIsPremium = info.isPremium;
       m.senderAccentColorId = info.accentColorId;
       m.senderEmojiStatusId = info.emojiStatusId;
@@ -1441,10 +1472,7 @@ class ChatViewModel extends ChangeNotifier {
         'member_id': {'@type': 'messageSenderUser', 'user_id': userId},
       });
       final status = member.obj('status');
-      final title = status?.str('custom_title');
-      final cleanTitle = (title?.trim().isNotEmpty ?? false)
-          ? title!.trim()
-          : null;
+      final cleanTitle = _memberTitle(member, status);
       switch (status?.type) {
         case 'chatMemberStatusCreator':
           return (MemberRole.owner, cleanTitle);
@@ -1456,5 +1484,19 @@ class ChatViewModel extends ChangeNotifier {
     } catch (_) {
       return (MemberRole.member, null);
     }
+  }
+
+  String? _memberTitle(
+    Map<String, dynamic> member,
+    Map<String, dynamic>? status,
+  ) {
+    final raw =
+        status?.str('custom_title') ??
+        member.str('custom_title') ??
+        member.str('tag') ??
+        status?.str('title') ??
+        member.str('title');
+    final title = raw?.trim();
+    return title == null || title.isEmpty ? null : title;
   }
 }

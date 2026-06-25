@@ -161,7 +161,6 @@ class _MessageBubbleState extends State<MessageBubble> {
         message.senderIsPremium &&
         message.senderEmojiStatusId != 0;
     final senderTitle = message.senderTitle?.trim();
-    final hasSenderTitle = senderTitle != null && senderTitle.isNotEmpty;
     final body = GestureDetector(
       key: _bubbleKey,
       onLongPress: _handleLongPress,
@@ -238,10 +237,9 @@ class _MessageBubbleState extends State<MessageBubble> {
                           padding: const EdgeInsets.only(left: 4, bottom: 3),
                           child: Row(
                             children: [
-                              if (message.senderRole != null ||
-                                  hasSenderTitle) ...[
+                              if (message.senderRole != null) ...[
                                 RoleTag(
-                                  role: message.senderRole ?? MemberRole.member,
+                                  role: message.senderRole!,
                                   title: showMemberTags ? senderTitle : null,
                                 ),
                                 const SizedBox(width: 4),
