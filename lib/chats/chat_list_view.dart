@@ -134,7 +134,7 @@ class _ChatListViewState extends State<ChatListView> {
       if (!mounted || !_scrollController.hasClients) return;
       final chats = _model.chats;
       final chatIndex = chats.indexWhere(
-        (chat) => chat.unreadCount > 0 || chat.isMarkedUnread,
+        (chat) => chat.showsRedUnreadIndicator,
       );
       if (chatIndex < 0) return;
 

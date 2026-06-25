@@ -171,6 +171,9 @@ class ChatSummary {
   /// override them; people use a circle.
   bool get usesSquareAvatar =>
       kind == ChatKind.group || kind == ChatKind.channel;
+
+  bool get showsRedUnreadIndicator =>
+      (unreadCount > 0 && !isMuted) || isMarkedUnread;
 }
 
 class ChatMessage {
