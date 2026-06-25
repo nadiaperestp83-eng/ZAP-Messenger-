@@ -21,6 +21,7 @@ import '../components/drawer_controller.dart' as dc;
 import '../components/photo_avatar.dart';
 import '../components/sf_symbols.dart';
 import '../components/ui_components.dart';
+import '../contacts/add_people_view.dart';
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
 import '../tdlib/td_models.dart';
@@ -30,8 +31,14 @@ import 'chat_list_view_model.dart';
 import 'chat_row_view.dart';
 import 'search_view.dart';
 
+class ChatListController extends ChangeNotifier {
+  void scrollToFirstUnread() => notifyListeners();
+}
+
 class ChatListView extends StatefulWidget {
-  const ChatListView({super.key});
+  const ChatListView({super.key, this.controller});
+
+  final ChatListController? controller;
 
   @override
   State<ChatListView> createState() => _ChatListViewState();
@@ -39,18 +46,21 @@ class ChatListView extends StatefulWidget {
 
 class _ChatListViewState extends State<ChatListView> {
   final ChatListViewModel _model = ChatListViewModel();
+  final ScrollController _scrollController = ScrollController();
   String _meName = '我';
   TdFileRef? _mePhoto;
   int _meStatusId = 0; // current emoji status, shown after the name
   int? _meId;
   StreamSubscription? _userSub;
   int? _openSwipeChat;
+  int _lastVisibleRows = 1;
 
   @override
   void initState() {
     super.initState();
     _model.onAppear();
     _model.addListener(_onModel);
+    widget.controller?.addListener(_scrollToFirstUnread);
     _loadMe();
     // Keep the header's name/status/photo live — TDLib emits updateUser for us
     // when the status or profile changes.
@@ -58,6 +68,14 @@ class _ChatListViewState extends State<ChatListView> {
       if (u.type != 'updateUser') return;
       if (u.obj('user')?.int64('id') == _meId) _loadMe();
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant ChatListView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller == widget.controller) return;
+    oldWidget.controller?.removeListener(_scrollToFirstUnread);
+    widget.controller?.addListener(_scrollToFirstUnread);
   }
 
   void _onModel() {
@@ -72,6 +90,8 @@ class _ChatListViewState extends State<ChatListView> {
   @override
   void dispose() {
     _userSub?.cancel();
+    widget.controller?.removeListener(_scrollToFirstUnread);
+    _scrollController.dispose();
     _model.removeListener(_onModel);
     _model.dispose();
     super.dispose();
@@ -101,6 +121,40 @@ class _ChatListViewState extends State<ChatListView> {
         builder: (_) => ChatView(chatId: chat.id, title: chat.title),
       ),
     );
+  }
+
+  void _showAddMenu() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const AddPeopleView()));
+  }
+
+  void _scrollToFirstUnread() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      final chats = _model.chats;
+      final chatIndex = chats.indexWhere(
+        (chat) => chat.unreadCount > 0 || chat.isMarkedUnread,
+      );
+      if (chatIndex < 0) return;
+
+      var itemIndex = chatIndex;
+      if (_model.archived.isNotEmpty) {
+        final assistantIndex = math.min(_lastVisibleRows + 1, chats.length);
+        if (assistantIndex <= chatIndex) itemIndex++;
+      }
+
+      const rowH = AppTheme.rowHeight + 0.5;
+      final target = math.min(
+        itemIndex * rowH,
+        _scrollController.position.maxScrollExtent,
+      );
+      _scrollController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+      );
+    });
   }
 
   @override
@@ -188,6 +242,15 @@ class _ChatListViewState extends State<ChatListView> {
               ],
             ),
             const Spacer(),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _showAddMenu,
+              child: SizedBox(
+                width: 36,
+                height: 36,
+                child: Icon(sfIcon('plus'), size: 25, color: c.textPrimary),
+              ),
+            ),
           ],
         ),
       ),
@@ -234,6 +297,7 @@ class _ChatListViewState extends State<ChatListView> {
         builder: (context, geo) {
           const rowH = AppTheme.rowHeight + 0.5;
           final visibleRows = math.max(1, (geo.maxHeight / rowH).ceil());
+          _lastVisibleRows = visibleRows;
           final chats = _model.chats;
           final hasArchive = _model.archived.isNotEmpty;
           final assistantIndex = math.min(visibleRows + 1, chats.length);
@@ -249,6 +313,7 @@ class _ChatListViewState extends State<ChatListView> {
           }
 
           return ListView.builder(
+            controller: _scrollController,
             padding:
                 EdgeInsets.zero, // header already consumed the top safe-area
             itemCount: items.length,

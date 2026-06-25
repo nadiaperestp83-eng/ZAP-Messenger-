@@ -696,13 +696,10 @@ class _ProfileViewState extends State<ProfileView> {
           child: Row(
             children: [
               Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(sfIcon(icon), size: 17, color: Colors.white),
+                width: 32,
+                height: 32,
+                alignment: Alignment.center,
+                child: Icon(sfIcon(icon), size: 25, color: color),
               ),
               const SizedBox(width: 14),
               Text(label, style: TextStyle(fontSize: 16, color: c.textPrimary)),
@@ -877,33 +874,31 @@ class _ProfileViewState extends State<ProfileView> {
       child: SafeArea(
         top: false,
         child: SizedBox(
-          height: 56,
+          height: 74,
           child: Row(
             children: [
-              Expanded(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => _root.push(
-                    MaterialPageRoute(builder: (_) => const SettingsView()),
-                  ),
-                  child: _barItem('gearshape.fill', '设置'),
+              const SizedBox(width: 28),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _root.push(
+                  MaterialPageRoute(builder: (_) => const SettingsView()),
+                ),
+                child: _barItem('gearshape.fill', '设置'),
+              ),
+              const SizedBox(width: 30),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                // Flip between EXPLICIT light/dark every tap (never `system`,
+                // which could equal the current brightness and do nothing).
+                onTap: () => theme.mode = isDark
+                    ? AppearanceMode.light
+                    : AppearanceMode.dark,
+                child: _barItem(
+                  isDark ? 'sun.max.fill' : 'moon.fill',
+                  isDark ? '日间' : '夜间',
                 ),
               ),
-              Container(width: 0.5, height: 28, color: c.divider),
-              Expanded(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  // Flip between EXPLICIT light/dark every tap (never `system`,
-                  // which could equal the current brightness and do nothing).
-                  onTap: () => theme.mode = isDark
-                      ? AppearanceMode.light
-                      : AppearanceMode.dark,
-                  child: _barItem(
-                    isDark ? 'sun.max.fill' : 'moon.fill',
-                    isDark ? '日间' : '夜间',
-                  ),
-                ),
-              ),
+              const Spacer(),
             ],
           ),
         ),
@@ -913,13 +908,16 @@ class _ProfileViewState extends State<ProfileView> {
 
   Widget _barItem(String icon, String label) {
     final c = context.colors;
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(sfIcon(icon), size: 20, color: c.textSecondary),
-        const SizedBox(width: 8),
-        Text(label, style: TextStyle(fontSize: 15, color: c.textPrimary)),
-      ],
+    return SizedBox(
+      width: 58,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(sfIcon(icon), size: 29, color: c.textPrimary),
+          const SizedBox(height: 5),
+          Text(label, style: TextStyle(fontSize: 15, color: c.textPrimary)),
+        ],
+      ),
     );
   }
 }

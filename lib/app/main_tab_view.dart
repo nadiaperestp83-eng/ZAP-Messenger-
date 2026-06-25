@@ -54,6 +54,7 @@ class _MainTabViewState extends State<MainTabView> {
   late final dc.TabBarVisibility _tabBar = dc.TabBarVisibility();
   late final UnreadBadgeModel _unread = UnreadBadgeModel()..start();
   late final CallManager _calls = CallManager()..start();
+  late final ChatListController _chatListController = ChatListController();
 
   @override
   void initState() {
@@ -67,6 +68,7 @@ class _MainTabViewState extends State<MainTabView> {
   @override
   void dispose() {
     _calls.dispose();
+    _chatListController.dispose();
     super.dispose();
   }
 
@@ -82,7 +84,7 @@ class _MainTabViewState extends State<MainTabView> {
   ];
 
   Widget _root(int i) => switch (i) {
-    0 => const ChatListView(),
+    0 => ChatListView(controller: _chatListController),
     1 => const ContactsView(),
     _ => const MomentsView(),
   };
@@ -97,12 +99,21 @@ class _MainTabViewState extends State<MainTabView> {
   }
 
   void _select(int i) {
+    final shouldJumpUnread = i == 0 && _unread.count > 0;
     if (i == _selection) {
       // Tapping the active tab pops to its root.
       _navKeys[i].currentState?.popUntil((r) => r.isFirst);
+      if (shouldJumpUnread) _scrollMessagesToFirstUnread();
       return;
     }
     setState(() => _selection = i);
+    if (shouldJumpUnread) _scrollMessagesToFirstUnread();
+  }
+
+  void _scrollMessagesToFirstUnread() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _chatListController.scrollToFirstUnread();
+    });
   }
 
   @override
@@ -321,8 +332,8 @@ class _ClassicTabBar extends StatelessWidget {
                               ),
                               if (i == 0 && unread > 0)
                                 Positioned(
-                                  right: -15,
-                                  top: -10,
+                                  right: -10,
+                                  top: -5,
                                   child: _miniBadge(unread),
                                 ),
                             ],

@@ -6,6 +6,7 @@
 //
 
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 
 import '../components/ui_components.dart';
@@ -53,6 +54,17 @@ class AppearanceView extends StatelessWidget {
                       theme.tabBarStyle == s,
                       () => theme.tabBarStyle = s,
                     ),
+                ]),
+                const SizedBox(height: 14),
+                _label(context, '显示'),
+                _card(context, [
+                  _toggleRow(
+                    context,
+                    Icons.groups_rounded,
+                    '群聊头像显示为圆形',
+                    theme.circularGroupAvatars,
+                    (v) => theme.circularGroupAvatars = v,
+                  ),
                 ]),
               ],
             ),
@@ -168,6 +180,35 @@ class AppearanceView extends StatelessWidget {
               if (selected) Icon(Icons.check, size: 18, color: AppTheme.brand),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _toggleRow(
+    BuildContext context,
+    IconData icon,
+    String label,
+    bool value,
+    ValueChanged<bool> onChanged,
+  ) {
+    final c = context.colors;
+    return SizedBox(
+      height: 52,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: AppTheme.brand),
+            const SizedBox(width: 14),
+            Text(label, style: TextStyle(fontSize: 16, color: c.textPrimary)),
+            const Spacer(),
+            CupertinoSwitch(
+              value: value,
+              activeTrackColor: AppTheme.brand,
+              onChanged: onChanged,
+            ),
+          ],
         ),
       ),
     );
