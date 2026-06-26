@@ -108,6 +108,7 @@ class _MessageBubbleState extends State<MessageBubble>
   bool _musicPressed = false;
   double _swipeX = 0;
   final Set<String> _expandedQuotes = {};
+  final Set<String> _revealedSpoilers = {};
 
   void _handleLongPress() {
     final box = _bubbleKey.currentContext?.findRenderObject() as RenderBox?;
@@ -1324,9 +1325,10 @@ class _MessageBubbleState extends State<MessageBubble>
     double fontSize = 16,
   ]) {
     final sourceEntities = entities ?? message.textEntities;
-    final quotes = sourceEntities.where((e) => e.isBlockQuote).toList()
-      ..sort((a, b) => a.offset.compareTo(b.offset));
-    if (quotes.isEmpty) {
+    final blocks =
+        sourceEntities.where((e) => e.isBlockQuote || e.isPreBlock).toList()
+          ..sort((a, b) => a.offset.compareTo(b.offset));
+    if (blocks.isEmpty) {
       return [
         _richText(
           text,
@@ -1345,9 +1347,9 @@ class _MessageBubbleState extends State<MessageBubble>
     final widgets = <Widget>[];
     var cursor = 0;
     var metaAdded = false;
-    for (final quote in quotes) {
-      final start = quote.offset.clamp(0, text.length).toInt();
-      final end = quote.end.clamp(start, text.length).toInt();
+    for (final block in blocks) {
+      final start = block.offset.clamp(0, text.length).toInt();
+      final end = block.end.clamp(start, text.length).toInt();
       if (end <= cursor) continue;
       if (start > cursor) {
         widgets.add(
@@ -1366,7 +1368,9 @@ class _MessageBubbleState extends State<MessageBubble>
         widgets.add(const SizedBox(height: 5));
       }
       widgets.add(
-        _quoteBlock(quote, text, start, end, base, link, sourceEntities),
+        block.isPreBlock
+            ? _preBlock(block, text, start, end, base, link, sourceEntities)
+            : _quoteBlock(block, text, start, end, base, link, sourceEntities),
       );
       cursor = end;
     }
@@ -1494,6 +1498,65 @@ class _MessageBubbleState extends State<MessageBubble>
     );
   }
 
+  Widget _preBlock(
+    MessageTextEntity pre,
+    String text,
+    int start,
+    int end,
+    Color base,
+    Color link,
+    List<MessageTextEntity> entities,
+  ) {
+    final c = context.colors;
+    final language = (pre.language ?? '').trim();
+    return Container(
+      width: math.min(MediaQuery.sizeOf(context).width * 0.70, 310.0),
+      decoration: BoxDecoration(
+        color: c.searchFill.withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: c.divider, width: 0.5),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (language.isNotEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(10, 5, 10, 4),
+              color: c.divider.withValues(alpha: 0.45),
+              child: Text(
+                language,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: c.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 9),
+            child: _richText(
+              text,
+              base,
+              link,
+              start,
+              end,
+              false,
+              false,
+              entities: entities,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   List<InlineSpan> _entitySpans(
     String text,
     int start,
@@ -1549,9 +1612,13 @@ class _MessageBubbleState extends State<MessageBubble>
       final active = entities
           .where((e) => e.offset <= cursor && e.end >= next)
           .toList();
-      spans.addAll(
-        _textSegmentSpans(text.substring(cursor, next), active, base, link),
-      );
+      final segment = text.substring(cursor, next);
+      if (segment == '\n') {
+        spans.add(const TextSpan(text: '\n'));
+        cursor = next;
+        continue;
+      }
+      spans.addAll(_textSegmentSpans(segment, active, base, link));
       cursor = next;
     }
     return spans;
@@ -1563,8 +1630,32 @@ class _MessageBubbleState extends State<MessageBubble>
     Color base,
     Color link,
   ) {
-    final style = _entityStyle(active, base, link);
-    final userId = _entityMentionUserId(active);
+    final spoilerKey = _spoilerKey(active);
+    final spoilerHidden =
+        spoilerKey != null && !_revealedSpoilers.contains(spoilerKey);
+    if (spoilerHidden) {
+      final recognizer = TapGestureRecognizer()
+        ..onTap = () {
+          if (!mounted) return;
+          setState(() => _revealedSpoilers.add(spoilerKey));
+        };
+      _linkRecognizers.add(recognizer);
+      return [
+        TextSpan(
+          text: segment,
+          style: _entityStyle(active, base, link),
+          recognizer: recognizer,
+        ),
+      ];
+    }
+
+    final effectiveActive = spoilerKey == null
+        ? active
+        : active
+              .where((e) => e.type != 'textEntityTypeSpoiler')
+              .toList(growable: false);
+    final style = _entityStyle(effectiveActive, base, link);
+    final userId = _entityMentionUserId(effectiveActive);
     if (userId != null) {
       final recognizer = TapGestureRecognizer()
         ..onTap = () {
@@ -1577,7 +1668,7 @@ class _MessageBubbleState extends State<MessageBubble>
       _linkRecognizers.add(recognizer);
       return [TextSpan(text: segment, style: style, recognizer: recognizer)];
     }
-    final target = _entityTapTarget(segment, active);
+    final target = _entityTapTarget(segment, effectiveActive);
     if (target != null) {
       final recognizer = TapGestureRecognizer()
         ..onTap = () => openLink(context, target);
@@ -1592,6 +1683,13 @@ class _MessageBubbleState extends State<MessageBubble>
     );
     if (hasCode) return [TextSpan(text: segment, style: style)];
     return _linkSpansStyled(segment, style, link);
+  }
+
+  String? _spoilerKey(List<MessageTextEntity> active) {
+    for (final e in active) {
+      if (e.type == 'textEntityTypeSpoiler') return '${e.offset}:${e.length}';
+    }
+    return null;
   }
 
   TextStyle _entityStyle(
@@ -1616,18 +1714,29 @@ class _MessageBubbleState extends State<MessageBubble>
         case 'textEntityTypeStrikethrough':
           decorations.add(TextDecoration.lineThrough);
         case 'textEntityTypeCode':
+          fontFamily = 'Menlo';
+          backgroundColor = context.colors.searchFill.withValues(alpha: 0.85);
         case 'textEntityTypePre':
         case 'textEntityTypePreCode':
           fontFamily = 'Menlo';
-          backgroundColor = context.colors.searchFill;
         case 'textEntityTypeSpoiler':
-          backgroundColor = base.withValues(alpha: 0.16);
+          color = base.withValues(alpha: 0.06);
+          backgroundColor = base.withValues(alpha: 0.34);
         case 'textEntityTypeTextUrl':
         case 'textEntityTypeUrl':
         case 'textEntityTypeMention':
         case 'textEntityTypeMentionName':
+        case 'textEntityTypeHashtag':
+        case 'textEntityTypeCashtag':
+        case 'textEntityTypeBotCommand':
+        case 'textEntityTypeEmailAddress':
+        case 'textEntityTypePhoneNumber':
+        case 'textEntityTypeBankCardNumber':
           color = link;
           decorations.add(TextDecoration.underline);
+        case 'textEntityTypeMediaTimestamp':
+          color = link;
+          weight = FontWeight.w600;
       }
     }
     return TextStyle(
@@ -1654,6 +1763,16 @@ class _MessageBubbleState extends State<MessageBubble>
           return segment.startsWith('@')
               ? 'https://t.me/${segment.substring(1)}'
               : null;
+        case 'textEntityTypeHashtag':
+        case 'textEntityTypeCashtag':
+        case 'textEntityTypeBotCommand':
+          return null;
+        case 'textEntityTypeEmailAddress':
+          return 'mailto:$segment';
+        case 'textEntityTypePhoneNumber':
+          return 'tel:${segment.replaceAll(RegExp(r'[^0-9+]'), '')}';
+        case 'textEntityTypeBankCardNumber':
+          return null;
         case 'textEntityTypeMentionName':
           return null;
       }

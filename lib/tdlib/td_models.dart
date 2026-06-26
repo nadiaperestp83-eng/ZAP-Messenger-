@@ -139,6 +139,8 @@ class MessageTextEntity {
       type == 'textEntityTypeExpandableBlockQuote';
   bool get isExpandableBlockQuote =>
       type == 'textEntityTypeExpandableBlockQuote';
+  bool get isPreBlock =>
+      type == 'textEntityTypePre' || type == 'textEntityTypePreCode';
 }
 
 /// One reaction bucket on a message (emoji or custom-emoji + count + chosen).
