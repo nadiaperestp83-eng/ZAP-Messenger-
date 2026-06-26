@@ -13,7 +13,6 @@ import 'package:provider/provider.dart';
 import '../components/sf_symbols.dart';
 import '../components/ui_components.dart';
 import '../theme/app_theme.dart';
-import 'edit_field_view.dart';
 import 'translation_controller.dart';
 
 class TranslationSettingsView extends StatelessWidget {
@@ -59,43 +58,8 @@ class TranslationSettingsView extends StatelessWidget {
                     icon: 'network',
                     title: '翻译服务',
                     trailing: translation.providerLabel,
-                    onTap: () => _showProviderPicker(context),
+                    onTap: null,
                   ),
-                  if (translation.provider == TranslationProvider.lingva) ...[
-                    const InsetDivider(leadingInset: 56),
-                    _navRow(
-                      context,
-                      icon: 'link',
-                      title: 'Lingva 地址',
-                      trailing: translation.lingvaEndpoint,
-                      onTap: () => _editEndpoint(
-                        context,
-                        title: 'Lingva 地址',
-                        initial: translation.lingvaEndpoint,
-                        hint: TranslationController.defaultLingvaEndpoint,
-                        onSaved: (v) => translation.lingvaEndpoint = v,
-                      ),
-                    ),
-                  ],
-                  if (translation.provider ==
-                      TranslationProvider.libreTranslate) ...[
-                    const InsetDivider(leadingInset: 56),
-                    _navRow(
-                      context,
-                      icon: 'link',
-                      title: 'LibreTranslate 地址',
-                      trailing: translation.libreTranslateEndpoint.isEmpty
-                          ? '未设置'
-                          : translation.libreTranslateEndpoint,
-                      onTap: () => _editEndpoint(
-                        context,
-                        title: 'LibreTranslate 地址',
-                        initial: translation.libreTranslateEndpoint,
-                        hint: 'https://libretranslate.example.com',
-                        onSaved: (v) => translation.libreTranslateEndpoint = v,
-                      ),
-                    ),
-                  ],
                 ]),
                 const SizedBox(height: 14),
                 _card(context, [
@@ -125,90 +89,6 @@ class TranslationSettingsView extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  void _showProviderPicker(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        final c = context.colors;
-        final translation = context.watch<TranslationController>();
-        return SafeArea(
-          child: Container(
-            margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-            decoration: BoxDecoration(
-              color: c.card,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: ListView.separated(
-              shrinkWrap: true,
-              itemCount: TranslationProvider.values.length,
-              separatorBuilder: (_, _) => const InsetDivider(leadingInset: 56),
-              itemBuilder: (context, i) {
-                final provider = TranslationProvider.values[i];
-                final selected = translation.provider == provider;
-                return GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    translation.provider = provider;
-                    Navigator.of(context).pop();
-                  },
-                  child: SizedBox(
-                    height: 52,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(
-                        children: [
-                          _iconBadge(
-                            context,
-                            'network',
-                            const Color(0xFF34A2DF),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              provider.label,
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: c.textPrimary,
-                              ),
-                            ),
-                          ),
-                          if (selected)
-                            Icon(Icons.check, size: 18, color: AppTheme.brand),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _editEndpoint(
-    BuildContext context, {
-    required String title,
-    required String initial,
-    required String hint,
-    required ValueChanged<String> onSaved,
-  }) async {
-    final value = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (_) => EditFieldView(
-          title: title,
-          initial: initial,
-          hint: hint,
-          keyboardType: TextInputType.url,
-        ),
-      ),
-    );
-    if (value != null) onSaved(value);
   }
 
   void _showTargetPicker(BuildContext context) {
@@ -315,7 +195,7 @@ class TranslationSettingsView extends StatelessWidget {
     required String icon,
     required String title,
     required String trailing,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
   }) {
     final c = context.colors;
     return GestureDetector(
@@ -349,14 +229,15 @@ class TranslationSettingsView extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 6),
-              SizedBox(
-                width: 14,
-                child: Icon(
-                  sfIcon('chevron.right'),
-                  size: 14,
-                  color: c.textTertiary,
+              if (onTap != null)
+                SizedBox(
+                  width: 14,
+                  child: Icon(
+                    sfIcon('chevron.right'),
+                    size: 14,
+                    color: c.textTertiary,
+                  ),
                 ),
-              ),
             ],
           ),
         ),

@@ -7,6 +7,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../components/sf_symbols.dart';
@@ -14,6 +15,7 @@ import '../components/ui_components.dart';
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
 import '../theme/app_theme.dart';
+import '../theme/theme_controller.dart';
 
 class GeneralSettingsView extends StatefulWidget {
   const GeneralSettingsView({super.key});
@@ -208,6 +210,7 @@ class _GeneralSettingsViewState extends State<GeneralSettingsView> {
   }
 
   Widget _chatCard() {
+    final theme = context.watch<ThemeController>();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -222,6 +225,14 @@ class _GeneralSettingsViewState extends State<GeneralSettingsView> {
               setState(() => _enterToSend = v);
               _prefs?.setBool('enterToSend', v);
             },
+          ),
+          const InsetDivider(leadingInset: 56),
+          _toggleRow(
+            'arrow.down.to.line',
+            const Color(0xFF3C8CF0),
+            '打开聊天显示最新消息',
+            theme.openChatsAtLatest,
+            (v) => theme.openChatsAtLatest = v,
           ),
         ]),
       ],

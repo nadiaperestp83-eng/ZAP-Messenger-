@@ -62,6 +62,7 @@ class ChatMediaRoute {
 enum ChatMediaCategory {
   media, // 图片/视频
   file, // 文件
+  audio, // 音频/音乐
   link, // 链接
   sticker, // 表情
   voice, // 语音
@@ -70,6 +71,7 @@ enum ChatMediaCategory {
   String get title => switch (this) {
     ChatMediaCategory.media => '图片/视频',
     ChatMediaCategory.file => '文件',
+    ChatMediaCategory.audio => '音频',
     ChatMediaCategory.link => '链接',
     ChatMediaCategory.sticker => '表情',
     ChatMediaCategory.voice => '语音',
@@ -80,6 +82,7 @@ enum ChatMediaCategory {
   String? get tdFilter => switch (this) {
     ChatMediaCategory.media => 'searchMessagesFilterPhotoAndVideo',
     ChatMediaCategory.file => 'searchMessagesFilterDocument',
+    ChatMediaCategory.audio => 'searchMessagesFilterAudio',
     ChatMediaCategory.link => 'searchMessagesFilterUrl',
     ChatMediaCategory.sticker => 'searchMessagesFilterAnimation',
     ChatMediaCategory.voice => 'searchMessagesFilterVoiceNote',
@@ -89,6 +92,7 @@ enum ChatMediaCategory {
   String get emptyText => switch (this) {
     ChatMediaCategory.media => '当前没有图片/视频',
     ChatMediaCategory.file => '当前没有文件',
+    ChatMediaCategory.audio => '当前没有音频',
     ChatMediaCategory.link => '当前没有链接',
     ChatMediaCategory.sticker => '当前没有表情',
     ChatMediaCategory.voice => '当前没有语音',
@@ -167,6 +171,7 @@ class ChatSummary {
     required this.id,
     required this.title,
     required this.lastMessage,
+    required this.lastMessageId,
     required this.date,
     required this.unreadCount,
     required this.order,
@@ -188,6 +193,7 @@ class ChatSummary {
   final int id;
   String title;
   String lastMessage;
+  int lastMessageId;
   int date;
   int unreadCount;
   int order;
@@ -233,6 +239,7 @@ class ChatMessage {
     this.imageWidth,
     this.imageHeight,
     this.document,
+    this.music,
     this.senderRole,
     this.senderTitle,
     this.senderIsPremium = false,
@@ -283,6 +290,7 @@ class ChatMessage {
   int? imageWidth;
   int? imageHeight;
   MessageDocument? document;
+  MessageMusic? music;
   MemberRole? senderRole;
   String? senderTitle;
   bool senderIsPremium;
@@ -422,6 +430,21 @@ class MessageDocument {
   final TdFileRef? file;
 }
 
+class MessageMusic {
+  MessageMusic({
+    required this.title,
+    this.performer,
+    this.cover,
+    this.file,
+    this.duration = 0,
+  });
+  final String title;
+  final String? performer;
+  final TdFileRef? cover;
+  final TdFileRef? file;
+  final int duration;
+}
+
 class MessageLocation {
   MessageLocation({
     required this.latitude,
@@ -505,9 +528,11 @@ abstract final class TDParse {
     final unread = chat.integer('unread_count') ?? 0;
 
     var lastText = '';
+    var lastMessageId = 0;
     var date = 0;
     final last = chat.obj('last_message');
     if (last != null) {
+      lastMessageId = last.int64('id') ?? 0;
       date = last.integer('date') ?? 0;
       final content = last.obj('content');
       if (content != null) lastText = messageText(content);
@@ -536,6 +561,7 @@ abstract final class TDParse {
       id: id,
       title: title,
       lastMessage: lastText,
+      lastMessageId: lastMessageId,
       date: date,
       unreadCount: unread,
       order: order,
@@ -637,6 +663,7 @@ abstract final class TDParse {
         imageWidth: media.width,
         imageHeight: media.height,
         document: media.document,
+        music: media.music,
         animatedSticker: media.animated,
         videoSticker: media.videoSticker,
         video: media.video,
@@ -1045,6 +1072,26 @@ abstract final class TDParse {
             height: video.integer('height'),
           );
         }
+      case 'messageAudio':
+        final audio = content.obj('audio');
+        if (audio != null) {
+          final mini = decodeMiniThumb(audio.obj('album_cover_minithumbnail'));
+          final title = _cleanString(audio.str('title'));
+          final fileName = _cleanString(audio.str('file_name'));
+          final performer = _cleanString(audio.str('performer'));
+          return MediaAttachment(
+            music: MessageMusic(
+              title: title ?? fileName ?? '音乐',
+              performer: performer,
+              cover: fileRef(
+                audio.obj('album_cover_thumbnail')?.obj('file'),
+                miniThumb: mini,
+              ),
+              file: fileRef(audio.obj('audio')),
+              duration: audio.integer('duration') ?? 0,
+            ),
+          );
+        }
       case 'messageDocument':
         final doc = content.obj('document');
         if (doc != null) {
@@ -1366,6 +1413,7 @@ class MediaAttachment {
     this.width,
     this.height,
     this.document,
+    this.music,
     this.animated,
     this.videoSticker,
     this.video,
@@ -1378,6 +1426,7 @@ class MediaAttachment {
   final int? width;
   final int? height;
   final MessageDocument? document;
+  final MessageMusic? music;
   final TdFileRef? animated; // .tgs Lottie sticker
   final TdFileRef? videoSticker; // .webm video sticker
   final TdFileRef? video; // playable video file (messageVideo)

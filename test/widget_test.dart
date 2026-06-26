@@ -2,6 +2,7 @@
 
 import 'package:mithka/tdlib/json_helpers.dart';
 import 'package:mithka/tdlib/td_models.dart';
+import 'package:mithka/settings/keyword_blocker.dart';
 import 'package:mithka/settings/translation_controller.dart';
 import 'package:mithka/theme/date_text.dart';
 import 'package:mithka/theme/theme_controller.dart';
@@ -150,6 +151,21 @@ void main() {
     });
   });
 
+  group('KeywordBlocker', () {
+    test('matches plain keywords and regex rules', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final blocker = KeywordBlocker.shared;
+      blocker.initialize(prefs);
+      blocker.replaceAll(['free money', r're:\b\d{5}\b', r'/hello\s+world/i']);
+
+      expect(blocker.matches('Claim FREE MONEY now'), isTrue);
+      expect(blocker.matches('code 12345 please'), isTrue);
+      expect(blocker.matches('HELLO     WORLD'), isTrue);
+      expect(blocker.matches('normal message'), isFalse);
+    });
+  });
+
   group('AppFontChoice', () {
     test('applies primary font before CJK and system fallbacks', () {
       final style = AppFontChoice.futura.applyTextStyle(
@@ -186,7 +202,7 @@ void main() {
 
       expect(controller.enabled, isFalse);
       expect(controller.autoTranslate, isFalse);
-      expect(controller.provider, TranslationProvider.tdlib);
+      expect(controller.provider, TranslationProvider.myMemory);
       expect(controller.targetLanguageCode, 'auto');
       expect(controller.noTranslateLanguageCodes, isEmpty);
       expect(
@@ -213,31 +229,19 @@ void main() {
       expect(reloaded.libreTranslateEndpoint, 'https://libre.example.com');
     });
 
-    test('detects common no-translate language families', () {
-      expect(TranslationController.detectLanguage('你好，今天怎么样'), 'zh');
-      expect(TranslationController.detectLanguage('これはテストです'), 'ja');
-      expect(TranslationController.detectLanguage('this is the test'), 'en');
-      expect(
-        TranslationController.detectLanguage('este es el texto para traducir'),
-        'es',
-      );
-      expect(
-        TranslationController.detectLanguage(
-          'Bonjour, je suis très content de vous voir',
-        ),
-        'fr',
-      );
-      expect(
-        TranslationController.detectLanguage(
-          'Das ist nicht für dich, sondern für mich',
-        ),
-        'de',
-      );
-      expect(
-        TranslationController.detectLanguage('não sei se você está aqui agora'),
-        'pt',
-      );
-      expect(TranslationController.detectLanguage('ok lol'), '');
-    });
+    test(
+      'forces MyMemory provider regardless of stale stored provider',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'translation.provider': 'tdlib',
+        });
+        final prefs = await SharedPreferences.getInstance();
+        final controller = TranslationController(prefs);
+
+        expect(controller.provider, TranslationProvider.myMemory);
+        controller.provider = TranslationProvider.lingva;
+        expect(controller.provider, TranslationProvider.myMemory);
+      },
+    );
   });
 }

@@ -655,12 +655,14 @@ class _FolderMembership {
     required this.title,
     required this.folder,
     required this.selected,
+    required this.autoSelected,
   });
 
   final int id;
   final String title;
   Map<String, dynamic> folder;
   bool selected;
+  bool autoSelected;
   bool saving = false;
 }
 
@@ -711,15 +713,17 @@ class _ChatFolderMembershipViewState extends State<ChatFolderMembershipView> {
         });
         final included = _ids(folder, 'included_chat_ids');
         final excluded = _ids(folder, 'excluded_chat_ids');
+        final autoSelected =
+            activeFolderIds.contains(id) &&
+            !included.contains(widget.chatId) &&
+            !excluded.contains(widget.chatId);
         loaded.add(
           _FolderMembership(
             id: id,
             title: _folderTitle(folder, info, id),
             folder: folder,
-            selected:
-                included.contains(widget.chatId) ||
-                (activeFolderIds.contains(id) &&
-                    !excluded.contains(widget.chatId)),
+            selected: included.contains(widget.chatId) || autoSelected,
+            autoSelected: autoSelected,
           ),
         );
       }
@@ -766,7 +770,8 @@ class _ChatFolderMembershipViewState extends State<ChatFolderMembershipView> {
     });
 
     final previous = Map<String, dynamic>.from(item.folder);
-    final updated = _folderWithMembership(item.folder, value);
+    final wasAutoSelected = item.autoSelected;
+    final updated = _folderWithMembership(item, value);
     try {
       await _client.query({
         '@type': 'editChatFolder',
@@ -776,6 +781,7 @@ class _ChatFolderMembershipViewState extends State<ChatFolderMembershipView> {
       if (!mounted) return;
       setState(() {
         item.folder = updated;
+        item.autoSelected = value ? false : wasAutoSelected;
         item.saving = false;
       });
     } catch (_) {
@@ -789,9 +795,10 @@ class _ChatFolderMembershipViewState extends State<ChatFolderMembershipView> {
   }
 
   Map<String, dynamic> _folderWithMembership(
-    Map<String, dynamic> folder,
+    _FolderMembership item,
     bool include,
   ) {
+    final folder = item.folder;
     final included = _ids(folder, 'included_chat_ids');
     final excluded = _ids(folder, 'excluded_chat_ids');
     if (include) {
@@ -799,9 +806,25 @@ class _ChatFolderMembershipViewState extends State<ChatFolderMembershipView> {
       excluded.remove(widget.chatId);
     } else {
       included.remove(widget.chatId);
-      excluded.add(widget.chatId);
+      if (item.autoSelected) {
+        excluded.add(widget.chatId);
+      } else {
+        excluded.remove(widget.chatId);
+      }
     }
 
+    return _chatFolderPayload(
+      folder,
+      includedChatIds: included,
+      excludedChatIds: excluded,
+    );
+  }
+
+  static Map<String, dynamic> _chatFolderPayload(
+    Map<String, dynamic> folder, {
+    required Set<int> includedChatIds,
+    required Set<int> excludedChatIds,
+  }) {
     return {
       '@type': 'chatFolder',
       'title':
@@ -810,8 +833,8 @@ class _ChatFolderMembershipViewState extends State<ChatFolderMembershipView> {
       if (folder.obj('icon') != null) 'icon': folder.obj('icon'),
       'is_shareable': folder.boolean('is_shareable') ?? false,
       'pinned_chat_ids': folder.int64Array('pinned_chat_ids') ?? const <int>[],
-      'included_chat_ids': included.toList()..sort(),
-      'excluded_chat_ids': excluded.toList()..sort(),
+      'included_chat_ids': includedChatIds.toList()..sort(),
+      'excluded_chat_ids': excludedChatIds.toList()..sort(),
       'exclude_muted': folder.boolean('exclude_muted') ?? false,
       'exclude_read': folder.boolean('exclude_read') ?? false,
       'exclude_archived': folder.boolean('exclude_archived') ?? false,
@@ -823,6 +846,62 @@ class _ChatFolderMembershipViewState extends State<ChatFolderMembershipView> {
     };
   }
 
+  Future<void> _createFolder() async {
+    final controller = TextEditingController();
+    final title = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        final c = context.colors;
+        return AlertDialog(
+          backgroundColor: c.card,
+          title: Text('新建聊天分组', style: TextStyle(color: c.textPrimary)),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(hintText: '分组名称'),
+            onSubmitted: (value) => Navigator.of(context).pop(value.trim()),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () =>
+                  Navigator.of(context).pop(controller.text.trim()),
+              child: const Text('创建'),
+            ),
+          ],
+        );
+      },
+    );
+    controller.dispose();
+    if (title == null || title.isEmpty) return;
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await _client.query({
+        '@type': 'createChatFolder',
+        'folder': _chatFolderPayload(
+          {'@type': 'chatFolder', 'title': title},
+          includedChatIds: {widget.chatId},
+          excludedChatIds: const <int>{},
+        ),
+      });
+      await _load();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('无法创建聊天分组')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
@@ -830,7 +909,18 @@ class _ChatFolderMembershipViewState extends State<ChatFolderMembershipView> {
       backgroundColor: c.groupedBackground,
       body: Column(
         children: [
-          NavHeader(title: '聊天分组', onBack: () => Navigator.of(context).pop()),
+          NavHeader(
+            title: '聊天分组',
+            onBack: () => Navigator.of(context).pop(),
+            trailing: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _loading ? null : _createFolder,
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Icon(sfIcon('plus'), size: 24, color: c.textPrimary),
+              ),
+            ),
+          ),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator.adaptive())
@@ -850,7 +940,17 @@ class _ChatFolderMembershipViewState extends State<ChatFolderMembershipView> {
     }
     if (_folders.isEmpty) {
       return Center(
-        child: Text('暂无聊天分组', style: TextStyle(color: c.textSecondary)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('暂无聊天分组', style: TextStyle(color: c.textSecondary)),
+            const SizedBox(height: 12),
+            CupertinoButton.filled(
+              onPressed: _createFolder,
+              child: const Text('新建分组'),
+            ),
+          ],
+        ),
       );
     }
     return ListView(
@@ -876,7 +976,7 @@ class _ChatFolderMembershipViewState extends State<ChatFolderMembershipView> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14),
           child: Text(
-            '关闭某个分组会将此聊天加入该分组的排除列表，用于覆盖自动分组规则。',
+            '关闭显式分组会将此聊天移出；如果自动分组规则仍会命中，则会加入排除列表。',
             style: TextStyle(fontSize: 13, color: c.textTertiary),
           ),
         ),

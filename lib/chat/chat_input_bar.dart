@@ -27,6 +27,7 @@ import '../components/sf_symbols.dart';
 import '../components/ui_components.dart';
 import '../theme/app_theme.dart';
 import '../tdlib/td_models.dart';
+import 'audio_search_view.dart';
 import 'chat_view_model.dart';
 import 'custom_emoji.dart';
 import 'emoji_catalog.dart';
@@ -34,6 +35,7 @@ import 'emoji_store.dart';
 import 'emoji_text_controller.dart';
 import 'checklist_composer_view.dart';
 import 'image_edit_view.dart';
+import 'link_handler.dart';
 import 'location_picker_view.dart';
 import 'poll_composer_view.dart';
 import 'sticker_preview.dart';
@@ -391,6 +393,118 @@ class _ChatInputBarState extends State<ChatInputBar> {
     );
   }
 
+  void _showBotMenu() {
+    final commands = vm.botCommands;
+    final menu = vm.botMenu;
+    if ((menu?.isWebApp ?? false) && commands.isEmpty) {
+      unawaited(openLink(context, menu!.url));
+      return;
+    }
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        final c = context.colors;
+        return SafeArea(
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            decoration: BoxDecoration(
+              color: c.card,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: ListView(
+              shrinkWrap: true,
+              padding: EdgeInsets.zero,
+              children: [
+                if (menu?.isWebApp ?? false) ...[
+                  _botMenuRow(
+                    icon: 'square.grid.2x2',
+                    title: menu!.text.isEmpty ? '打开菜单' : menu.text,
+                    subtitle: menu.url,
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      unawaited(openLink(context, menu.url));
+                    },
+                  ),
+                  if (commands.isNotEmpty) const InsetDivider(leadingInset: 56),
+                ],
+                for (var i = 0; i < commands.length; i++) ...[
+                  _botMenuRow(
+                    icon: 'slash.circle',
+                    title: '/${commands[i].command}',
+                    subtitle: commands[i].description,
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      _insertBotCommand(commands[i].command);
+                    },
+                  ),
+                  if (i < commands.length - 1)
+                    const InsetDivider(leadingInset: 56),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _botMenuRow({
+    required String icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    final c = context.colors;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: SizedBox(
+        height: 58,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Row(
+            children: [
+              Icon(sfIcon(icon), size: 22, color: AppTheme.brand),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 16, color: c.textPrimary),
+                    ),
+                    if (subtitle.trim().isNotEmpty)
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 12, color: c.textSecondary),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _insertBotCommand(String command) {
+    final text = '/${command.trim()} ';
+    _controller.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+    _focus.requestFocus();
+  }
+
   Widget _senderOptionRow(MessageSenderOption option) {
     final c = context.colors;
     final selected =
@@ -442,6 +556,29 @@ class _ChatInputBarState extends State<ChatInputBar> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
+          if (vm.peerIsBot &&
+              (vm.botCommands.isNotEmpty ||
+                  (vm.botMenu?.isWebApp ?? false))) ...[
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _showBotMenu,
+              child: Container(
+                width: 36,
+                height: 36,
+                margin: const EdgeInsets.only(right: 8),
+                decoration: BoxDecoration(
+                  color: c.searchFill,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  sfIcon('square.grid.2x2'),
+                  size: 20,
+                  color: c.textSecondary,
+                ),
+              ),
+            ),
+          ],
           Expanded(
             child: Container(
               decoration: BoxDecoration(
@@ -797,8 +934,8 @@ class _ChatInputBarState extends State<ChatInputBar> {
     widget.vm.sendPoll(question, options);
   }
 
-  /// 音频: pick an audio file and send it as a music message.
-  Future<void> _pickAudio() async {
+  /// 音频: pick a local audio file and send it as a music message.
+  Future<void> _pickLocalAudio() async {
     try {
       final result = await FilePicker.platform.pickFiles(type: FileType.audio);
       final path = result?.files.single.path;
@@ -806,6 +943,18 @@ class _ChatInputBarState extends State<ChatInputBar> {
     } catch (_) {
       _pickFailed('音频');
     }
+  }
+
+  /// 音频: search Telegram audio first; local files remain available inside.
+  Future<void> _pickAudio() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AudioSearchView(
+          onSend: widget.vm.sendAudioFromMessage,
+          onPickLocal: _pickLocalAudio,
+        ),
+      ),
+    );
   }
 
   /// 清单: collect a title + tasks and send a checklist (to-do list).

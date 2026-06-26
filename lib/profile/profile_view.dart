@@ -232,9 +232,10 @@ class _ProfileViewState extends State<ProfileView> {
 
   Widget _banner() {
     final user = _vm.user;
+    final hidePhone = context.watch<ThemeController>().hideSidebarPhone;
     final username = (user?.username?.isNotEmpty ?? false)
         ? '@${user!.username}'
-        : (user?.phoneNumber ?? '');
+        : (hidePhone ? '' : (user?.phoneNumber ?? ''));
     return Container(
       padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
       decoration: BoxDecoration(gradient: AppTheme.brandGradient),
@@ -311,16 +312,18 @@ class _ProfileViewState extends State<ProfileView> {
                           ],
                         ],
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        username,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.white.withValues(alpha: 0.85),
+                      if (username.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          username,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.white.withValues(alpha: 0.85),
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
@@ -444,6 +447,7 @@ class _ProfileViewState extends State<ProfileView> {
   Widget _accountsCard() {
     final c = context.colors;
     final accounts = context.watch<AccountStore>();
+    final hidePhone = context.watch<ThemeController>().hideSidebarPhone;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 0),
       decoration: BoxDecoration(
@@ -464,7 +468,7 @@ class _ProfileViewState extends State<ProfileView> {
                   : null,
               child: _accountRow(
                 s.name,
-                s.phone,
+                hidePhone ? '' : s.phone,
                 s.avatarPath,
                 selected: s.slot == accounts.activeSlot,
               ),

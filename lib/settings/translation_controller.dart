@@ -26,10 +26,7 @@ enum TranslationProvider {
   final String label;
 
   static TranslationProvider fromStorage(String? value) =>
-      TranslationProvider.values.firstWhere(
-        (p) => p.storageValue == value,
-        orElse: () => TranslationProvider.tdlib,
-      );
+      TranslationProvider.myMemory;
 }
 
 class TranslationController extends ChangeNotifier {
@@ -147,9 +144,9 @@ class TranslationController extends ChangeNotifier {
   }
 
   set provider(TranslationProvider value) {
-    if (_provider == value) return;
-    _provider = value;
-    _prefs.setString(_providerKey, value.storageValue);
+    if (_provider == TranslationProvider.myMemory) return;
+    _provider = TranslationProvider.myMemory;
+    _prefs.setString(_providerKey, TranslationProvider.myMemory.storageValue);
     notifyListeners();
   }
 

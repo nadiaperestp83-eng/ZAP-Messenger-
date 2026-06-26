@@ -8,6 +8,7 @@
 //
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:fvp/fvp.dart' as fvp;
 import 'package:provider/provider.dart';
@@ -28,7 +29,18 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Route video_player through the MDK/FFmpeg backend so .webm (VP9 + alpha)
   // video stickers decode + play (and stay transparent).
-  fvp.registerWith();
+  //
+  // MDK's Android hardware decoder path uses AMediaCodec. Some Android 14 /
+  // HyperOS builds crash natively in AMediaCodec_dequeueInputBuffer, so Android
+  // uses software decoders first. Video stickers are small enough that this is a
+  // better tradeoff than risking a process abort.
+  fvp.registerWith(
+    options: defaultTargetPlatform == TargetPlatform.android
+        ? {
+            'video.decoders': ['FFmpeg', 'dav1d'],
+          }
+        : null,
+  );
   // Portrait only — no landscape.
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
@@ -88,6 +100,12 @@ class _MithkaAppState extends State<MithkaApp> {
         seedColor: AppTheme.brand,
         brightness: brightness,
       ),
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: _NoRadiusPageTransitionsBuilder(),
+          TargetPlatform.fuchsia: _NoRadiusPageTransitionsBuilder(),
+        },
+      ),
       extensions: [colors],
       splashFactory: NoSplash.splashFactory,
       highlightColor: Colors.transparent,
@@ -143,6 +161,39 @@ class _MithkaAppState extends State<MithkaApp> {
           );
         },
       ),
+    );
+  }
+}
+
+class _NoRadiusPageTransitionsBuilder extends PageTransitionsBuilder {
+  const _NoRadiusPageTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    if (route.fullscreenDialog) {
+      final offset = Tween<Offset>(
+        begin: const Offset(0, 0.08),
+        end: Offset.zero,
+      ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
+      return FadeTransition(
+        opacity: animation,
+        child: SlideTransition(position: offset, child: child),
+      );
+    }
+
+    final offset = Tween<Offset>(
+      begin: const Offset(0.08, 0),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
+    return FadeTransition(
+      opacity: animation,
+      child: SlideTransition(position: offset, child: child),
     );
   }
 }

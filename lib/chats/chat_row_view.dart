@@ -29,8 +29,15 @@ const List<Color> _telegramAccentColors = [
 ];
 
 class ChatRowView extends StatelessWidget {
-  const ChatRowView({super.key, required this.chat});
+  const ChatRowView({
+    super.key,
+    required this.chat,
+    this.archived = false,
+    this.onClearUnread,
+  });
   final ChatSummary chat;
+  final bool archived;
+  final VoidCallback? onClearUnread;
 
   @override
   Widget build(BuildContext context) {
@@ -125,21 +132,25 @@ class ChatRowView extends StatelessWidget {
           ),
           if (chat.unreadCount > 0)
             Positioned(
-              right: -AppSpacing.sm,
-              top: -(AppSpacing.xs + 1),
-              child: UnreadBadge(count: chat.unreadCount, muted: chat.isMuted),
+              right: 0,
+              top: 0,
+              child: UnreadBadge(
+                count: chat.unreadCount,
+                muted: archived || chat.isMuted,
+                onClear: onClearUnread,
+              ),
             )
           else if (chat.isMarkedUnread)
             Positioned(
-              right: -AppSpacing.xxs,
-              top: -AppSpacing.xxs,
+              right: 0,
+              top: 0,
               child: Container(
                 padding: const EdgeInsets.all(AppMetric.badgeOutlinePadding),
                 decoration: const BoxDecoration(
                   color: Colors.white,
                   shape: BoxShape.circle,
                 ),
-                child: const RedDot(size: AppMetric.unreadDot),
+                child: RedDot(size: AppMetric.unreadDot, muted: archived),
               ),
             ),
         ],

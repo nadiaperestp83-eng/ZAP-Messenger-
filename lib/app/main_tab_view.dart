@@ -15,6 +15,7 @@ import '../call/call_screen.dart';
 import '../chats/chat_list_view.dart';
 import '../components/drawer_controller.dart' as dc;
 import '../components/sf_symbols.dart';
+import '../components/ui_components.dart';
 import '../contacts/contacts_view.dart';
 import '../moments/moments_view.dart';
 import '../profile/profile_view.dart';
@@ -217,6 +218,7 @@ class _MainTabViewState extends State<MainTabView> {
                       selection: selection,
                       onSelect: _select,
                       items: tabs,
+                      onClearUnread: _chatListController.markAllRead,
                       unread: context.watch<UnreadBadgeModel>().countFor(
                         theme.unreadBadgeMode,
                       ),
@@ -302,11 +304,13 @@ class _ClassicTabBar extends StatelessWidget {
   const _ClassicTabBar({
     required this.selection,
     required this.onSelect,
+    required this.onClearUnread,
     required this.items,
     required this.unread,
   });
   final int selection;
   final ValueChanged<int> onSelect;
+  final VoidCallback onClearUnread;
   final List<_MainTabItem> items;
   final int unread;
 
@@ -348,9 +352,12 @@ class _ClassicTabBar extends StatelessWidget {
                               ),
                               if (i == 0 && unread > 0)
                                 Positioned(
-                                  right: -10,
-                                  top: -5,
-                                  child: _miniBadge(unread),
+                                  right: 0,
+                                  top: 0,
+                                  child: UnreadBadge(
+                                    count: unread,
+                                    onClear: onClearUnread,
+                                  ),
                                 ),
                             ],
                           ),
@@ -375,22 +382,4 @@ class _ClassicTabBar extends StatelessWidget {
       ),
     );
   }
-
-  Widget _miniBadge(int count) => Container(
-    constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-    padding: EdgeInsets.symmetric(horizontal: count > 9 ? 5 : 0),
-    alignment: Alignment.center,
-    decoration: BoxDecoration(
-      color: AppTheme.unreadBadge,
-      borderRadius: BorderRadius.circular(9),
-    ),
-    child: Text(
-      count > 99 ? '99+' : '$count',
-      style: const TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w600,
-        color: Colors.white,
-      ),
-    ),
-  );
 }

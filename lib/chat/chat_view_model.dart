@@ -61,6 +61,25 @@ class MessageSenderOption {
   }
 }
 
+class BotCommandOption {
+  const BotCommandOption({required this.command, required this.description});
+
+  final String command;
+  final String description;
+}
+
+class BotMenuInfo {
+  const BotMenuInfo({required this.type, this.text = '', this.url = ''});
+
+  final String type;
+  final String text;
+  final String url;
+
+  bool get isWebApp => type == 'botMenuButton' && url.isNotEmpty;
+  bool get opensCommands =>
+      type == 'botMenuButtonCommands' || type == 'botMenuButtonDefault';
+}
+
 class _DraftMention {
   const _DraftMention({required this.text, required this.userId});
 
@@ -119,6 +138,9 @@ class ChatViewModel extends ChangeNotifier {
       false; // notifications muted (channel subscribers get a toggle)
   String sendDisabledReason = ''; // shown in the disabled composer bar
   bool _chatCanSend = true; // chat-wide default can_send_basic_messages
+  bool peerIsBot = false;
+  BotMenuInfo? botMenu;
+  List<BotCommandOption> botCommands = const [];
 
   final TdClient _client = TdClient.shared;
   StreamSubscription? _sub;
@@ -126,6 +148,7 @@ class ChatViewModel extends ChangeNotifier {
   bool _hasOlderHistory = true;
   int? _restoreTopId;
   int? _pendingScrollToId;
+  final Set<int> _blockedReadIds = {};
 
   // Typing: sender ids currently acting, auto-cleared after a few seconds.
   final Map<int, String> _typing = {};
@@ -328,11 +351,20 @@ class ChatViewModel extends ChangeNotifier {
   /// unread badge. Viewing the newest message advances last_read_inbox_message_id
   /// past everything older, so a single id suffices.
   void _markChatRead() {
-    if (messages.isEmpty || unreadCount <= 0) return;
+    if (unreadCount <= 0) return;
+    final latestVisible = messages.isNotEmpty ? messages.last.id : 0;
+    final latestBlocked = _allMessages
+        .where(_isBlockedMessage)
+        .map((m) => m.id)
+        .fold<int>(0, (a, b) => a > b ? a : b);
+    final messageId = latestVisible > latestBlocked
+        ? latestVisible
+        : latestBlocked;
+    if (messageId <= 0) return;
     _client.send({
       '@type': 'viewMessages',
       'chat_id': chatId,
-      'message_ids': [messages.last.id],
+      'message_ids': [messageId],
       'force_read': true,
     });
   }
@@ -605,6 +637,19 @@ class ChatViewModel extends ChangeNotifier {
           'performer': '',
         },
       },
+    });
+  }
+
+  /// 音频搜索: send a clean copy of an existing Telegram audio message.
+  Future<void> sendAudioFromMessage(int sourceChatId, int messageId) async {
+    await _client.query({
+      '@type': 'forwardMessages',
+      'chat_id': chatId,
+      'from_chat_id': sourceChatId,
+      'message_ids': [messageId],
+      'options': {'@type': 'messageSendOptions'},
+      'send_copy': true,
+      'remove_caption': false,
     });
   }
 
@@ -908,9 +953,11 @@ class ChatViewModel extends ChangeNotifier {
               '@type': 'getUser',
               'user_id': uid,
             });
+            peerIsBot = _isBotUser(user);
             peerOnline = TDParse.isUserOnline(user);
             peerStatusText = TDParse.userStatus(user);
           } catch (_) {}
+          if (peerIsBot) await _loadBotInfo(uid);
         }
       case 'chatTypeBasicGroup':
         final gid = type?.int64('basic_group_id');
@@ -947,6 +994,52 @@ class ChatViewModel extends ChangeNotifier {
     }
     notifyListeners();
     _loadPinnedMessage();
+  }
+
+  bool _isBotUser(Map<String, dynamic> user) =>
+      user.obj('type')?.type == 'userTypeBot' ||
+      user.obj('type')?.type == 'userTypeRegularBot' ||
+      user.boolean('is_bot') == true;
+
+  Future<void> _loadBotInfo(int userId) async {
+    try {
+      final full = await _client.query({
+        '@type': 'getUserFullInfo',
+        'user_id': userId,
+      });
+      final info = full.obj('bot_info');
+      if (info == null) return;
+      final menu = _parseBotMenu(info.obj('menu_button'));
+      final commands =
+          (info.objects('commands') ?? const <Map<String, dynamic>>[])
+              .map(
+                (c) => BotCommandOption(
+                  command: c.str('command') ?? '',
+                  description: c.str('description') ?? '',
+                ),
+              )
+              .where((c) => c.command.trim().isNotEmpty)
+              .toList();
+      botMenu = menu;
+      botCommands = commands;
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  BotMenuInfo? _parseBotMenu(Map<String, dynamic>? menu) {
+    if (menu == null) return null;
+    switch (menu.type) {
+      case 'botMenuButton':
+        return BotMenuInfo(
+          type: menu.type!,
+          text: menu.str('text') ?? '菜单',
+          url: menu.str('url') ?? '',
+        );
+      case 'botMenuButtonCommands':
+      case 'botMenuButtonDefault':
+        return BotMenuInfo(type: menu.type!);
+    }
+    return null;
   }
 
   /// Maps the current user's member status (+ channel-ness / chat defaults) onto
@@ -1497,7 +1590,36 @@ class ChatViewModel extends ChangeNotifier {
     messages =
         _allMessages.where((message) => !_isBlockedMessage(message)).toList()
           ..sort((a, b) => a.id.compareTo(b.id));
+    _markBlockedMessagesReadThroughVisibleBoundary();
     notifyListeners();
+  }
+
+  void _markBlockedMessagesReadThroughVisibleBoundary() {
+    if (_allMessages.isEmpty) return;
+    final visibleMax = messages.isNotEmpty
+        ? messages.last.id
+        : _allMessages.last.id;
+    final ids = _allMessages
+        .where(
+          (m) =>
+              m.id <= visibleMax &&
+              !_blockedReadIds.contains(m.id) &&
+              _isBlockedMessage(m),
+        )
+        .map((m) => m.id)
+        .toList();
+    if (ids.isEmpty) return;
+    _blockedReadIds.addAll(ids);
+    for (var i = 0; i < ids.length; i += 100) {
+      final end = i + 100 > ids.length ? ids.length : i + 100;
+      final chunk = ids.sublist(i, end);
+      _client.send({
+        '@type': 'viewMessages',
+        'chat_id': chatId,
+        'message_ids': chunk,
+        'force_read': true,
+      });
+    }
   }
 
   void _merge(List<ChatMessage> incoming) {
@@ -1598,6 +1720,7 @@ class ChatViewModel extends ChangeNotifier {
     final removed = ids.toSet();
     _allMessages.removeWhere((m) => removed.contains(m.id));
     messages.removeWhere((m) => removed.contains(m.id));
+    _blockedReadIds.removeWhere(removed.contains);
     if (replyTo != null && removed.contains(replyTo!.id)) replyTo = null;
     notifyListeners();
   }

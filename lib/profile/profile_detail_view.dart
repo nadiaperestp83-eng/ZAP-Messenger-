@@ -6,6 +6,7 @@
 //  it, compact detail rows, and a fixed bottom bar (音视频通话 / 发消息).
 //
 
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/cupertino.dart';
@@ -15,10 +16,12 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../call/call_manager.dart';
+import '../chat/audio_search_view.dart';
 import '../chat/chat_search_view.dart';
 import '../chat/chat_view.dart';
 import '../chat/custom_emoji.dart';
 import '../chat/full_image_viewer.dart';
+import '../chat/voice_audio.dart';
 import '../components/photo_avatar.dart';
 import '../components/sf_symbols.dart';
 import '../components/ui_components.dart';
@@ -50,7 +53,11 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
   List<TdFileRef> _photos = []; // 精选照片 — profile-photo history
   String _birthday = '';
   String _location = '';
+  String _musicTitle = '';
+  ChatMessage? _musicMessage;
+  final VoicePlayer _musicPlayer = VoicePlayer();
   bool _hideIdentity = false;
+  bool _isMe = false;
 
   @override
   void initState() {
@@ -59,7 +66,22 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
     _load();
   }
 
+  @override
+  void dispose() {
+    _musicPlayer.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
+    try {
+      final me = await TdClient.shared.query({'@type': 'getMe'});
+      if (mounted) {
+        setState(() {
+          _isMe = me.int64('id') == widget.userId;
+          if (_isMe) _musicTitle = _defaultOwnMusicTitle;
+        });
+      }
+    } catch (_) {}
     try {
       final user = await TdClient.shared.query({
         '@type': 'getUser',
@@ -92,7 +114,11 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
           _birthday = _formatBirthday(full.obj('birthdate'));
           _location =
               full.obj('business_info')?.obj('location')?.str('address') ?? '';
+          _musicTitle = _isMe
+              ? _defaultOwnMusicTitle
+              : _extractMusicTitle(full, _bio);
         });
+        await _resolveMusicCandidate(_musicTitle);
       }
     } catch (_) {}
     try {
@@ -192,6 +218,31 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
     showToast(context, '已复制名片链接');
   }
 
+  Future<void> _openMusicSearch() async {
+    final initial = _musicTitle.trim();
+    final selected = await Navigator.of(context).push<(int, ChatMessage)>(
+      MaterialPageRoute(
+        builder: (_) =>
+            AudioSearchView(initialQuery: initial, selectOnly: true),
+      ),
+    );
+    if (selected == null || !mounted) return;
+    final (_, message) = selected;
+    setState(() {
+      _musicMessage = message;
+      _musicTitle = message.music?.title ?? message.text;
+    });
+  }
+
+  String _durationString(int seconds) {
+    final s = seconds < 0 ? 0 : seconds;
+    final h = s ~/ 3600;
+    final m = (s % 3600) ~/ 60;
+    final sec = s % 60;
+    String two(int v) => v.toString().padLeft(2, '0');
+    return h > 0 ? '${two(h)}:${two(m)}:${two(sec)}' : '${two(m)}:${two(sec)}';
+  }
+
   // MARK: - Build
 
   @override
@@ -206,12 +257,12 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
               padding: EdgeInsets.zero,
               children: [
                 _header(),
-                Container(height: 12, color: c.groupedBackground),
-                _secondaryActions(),
                 if (_photos.isNotEmpty) ...[
                   Container(height: 12, color: c.groupedBackground),
                   _photosCard(),
                 ],
+                Container(height: 12, color: c.groupedBackground),
+                _profileToolsCard(),
                 if (_infoRows.isNotEmpty) ...[
                   Container(height: 12, color: c.groupedBackground),
                   _infoCard(),
@@ -232,6 +283,8 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
     if (_location.isNotEmpty) ('所在地', _location),
   ];
 
+  static const _defaultOwnMusicTitle = 'SEKAI NO OWARI - The Peak';
+
   String _formatBirthday(Map<String, dynamic>? bd) {
     if (bd == null) return '';
     final d = bd.integer('day') ?? 0;
@@ -240,6 +293,57 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
     if (d == 0 || m == 0) return '';
     final md = '$m月$d日';
     return y > 0 ? '$y年$md' : md;
+  }
+
+  String _extractMusicTitle(Map<String, dynamic> full, String bio) {
+    for (final source in [
+      full.str('music'),
+      full.obj('business_info')?.str('music'),
+      bio,
+    ]) {
+      final value = source?.trim();
+      if (value == null || value.isEmpty) continue;
+      final match = RegExp(
+        r'(?:音乐|music)\s*[:：]\s*(.+)',
+        caseSensitive: false,
+      ).firstMatch(value);
+      if (match != null) return match.group(1)!.trim();
+    }
+    return '';
+  }
+
+  Future<void> _resolveMusicCandidate(String title) async {
+    final q = title.trim();
+    if (q.isEmpty || _musicMessage?.music?.file != null) return;
+    try {
+      final res = await TdClient.shared.query({
+        '@type': 'searchMessages',
+        'chat_list': {'@type': 'chatListMain'},
+        'query': q,
+        'offset_date': 0,
+        'offset_chat_id': 0,
+        'offset_message_id': 0,
+        'limit': 1,
+        'filter': {'@type': 'searchMessagesFilterAudio'},
+        'min_date': 0,
+        'max_date': 0,
+      });
+      ChatMessage? first;
+      for (final object
+          in res.objects('messages') ?? const <Map<String, dynamic>>[]) {
+        final message = TDParse.message(object);
+        if (message?.music?.file != null) {
+          first = message;
+          break;
+        }
+      }
+      if (first == null || !mounted) return;
+      final resolved = first;
+      setState(() {
+        _musicMessage = resolved;
+        _musicTitle = resolved.music?.title ?? q;
+      });
+    } catch (_) {}
   }
 
   /// Cover (blurred profile photo, gradient fallback) + overlapping avatar +
@@ -301,10 +405,10 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
     final idText = (_username?.isNotEmpty ?? false)
         ? 'ID: $_username'
         : (widget.userId > 0 ? 'ID: ${widget.userId}' : '');
-    final subtitle = [
-      if (_phone.isNotEmpty) _phone,
+    final identityLines = [
+      if (_phone.isNotEmpty && !_hideIdentity) _phone,
       if (idText.isNotEmpty) idText,
-    ].join('  ');
+    ];
     return Container(
       transform: Matrix4.translationValues(0, -34, 0),
       decoration: BoxDecoration(
@@ -344,58 +448,27 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _nameLine(),
-                      if (subtitle.isNotEmpty) ...[
+                      if (identityLines.isNotEmpty) ...[
                         const SizedBox(height: 7),
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Expanded(
-                              child: Text(
-                                _hideIdentity
-                                    ? _maskedIdentity(
-                                        phone: _phone,
-                                        idText: idText,
-                                      )
-                                    : subtitle,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: c.textSecondary,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onTap: () => setState(
-                                () => _hideIdentity = !_hideIdentity,
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(4),
-                                child: Icon(
-                                  _hideIdentity
-                                      ? CupertinoIcons.eye
-                                      : CupertinoIcons.eye_slash,
-                                  size: 17,
-                                  color: c.textTertiary,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ] else if (idText.isNotEmpty) ...[
-                        const SizedBox(height: 7),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                _hideIdentity ? 'ID: ••••••' : idText,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: c.textSecondary,
-                                ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  for (final line in identityLines)
+                                    Text(
+                                      line,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        height: 1.28,
+                                        color: c.textSecondary,
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -487,12 +560,6 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
     );
   }
 
-  String _maskedIdentity({required String phone, required String idText}) {
-    final parts = <String>[];
-    if (idText.isNotEmpty) parts.add('ID: ••••••');
-    return parts.join('  ');
-  }
-
   Widget _cover(double h) {
     if (_photo != null) {
       return SizedBox(
@@ -516,11 +583,13 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
     );
   }
 
-  Widget _secondaryActions() {
+  Widget _profileToolsCard() {
     return Container(
       color: context.colors.card,
       child: Column(
         children: [
+          _musicRow(),
+          const InsetDivider(leadingInset: 56),
           _profileRow(
             'magnifyingglass',
             '查找聊天记录',
@@ -532,11 +601,161 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
     );
   }
 
+  Widget _musicRow() {
+    final c = context.colors;
+    final title = _musicTitle.trim();
+    final music = _musicMessage?.music;
+    final musicFile = music?.file;
+    final canPlay = musicFile != null;
+    final toggle = canPlay ? () => _musicPlayer.toggleAudio(musicFile) : null;
+    return AnimatedBuilder(
+      animation: _musicPlayer,
+      builder: (context, _) {
+        final active = _musicPlayer.isActive(music?.file);
+        final playing = active && _musicPlayer.isPlaying;
+        final loading = active && _musicPlayer.isLoading;
+        final total = active && _musicPlayer.total.inMilliseconds > 0
+            ? _musicPlayer.total
+            : Duration(seconds: music?.duration ?? 0);
+        final position = active ? _musicPlayer.position : Duration.zero;
+        final totalMs = math.max(1, total.inMilliseconds);
+        final value = (position.inMilliseconds / totalMs).clamp(0.0, 1.0);
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: canPlay ? toggle : _openMusicSearch,
+          child: SizedBox(
+            height: active || loading ? 66 : 56,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 10, 0),
+              child: Row(
+                children: [
+                  Icon(sfIcon('music.note'), size: 22, color: c.textPrimary),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '音乐',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            color: c.textPrimary,
+                          ),
+                        ),
+                        if (active || loading) ...[
+                          const SizedBox(height: 3),
+                          _musicProgressLine(
+                            value: value.toDouble(),
+                            position: position,
+                            total: total,
+                            onChanged: (v) => _musicPlayer.seekFraction(
+                              v,
+                              music?.duration ?? 0,
+                            ),
+                            onChangeEnd: (v) => _musicPlayer.seekFraction(
+                              v,
+                              music?.duration ?? 0,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: MediaQuery.sizeOf(context).width * 0.34,
+                    child: Text(
+                      title.isEmpty ? '未设置' : title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.right,
+                      style: TextStyle(fontSize: 13, color: c.textTertiary),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  if (loading)
+                    const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator.adaptive(strokeWidth: 2),
+                    )
+                  else if (canPlay)
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: toggle,
+                      child: Icon(
+                        sfIcon(playing ? 'pause.fill' : 'play.fill'),
+                        size: 18,
+                        color: AppTheme.brand,
+                      ),
+                    )
+                  else
+                    Icon(
+                      sfIcon('chevron.right'),
+                      size: 16,
+                      color: c.textTertiary,
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _musicProgressLine({
+    required double value,
+    required Duration position,
+    required Duration total,
+    required ValueChanged<double> onChanged,
+    required ValueChanged<double> onChangeEnd,
+  }) {
+    final c = context.colors;
+    return Row(
+      children: [
+        Expanded(
+          child: SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 2.5,
+              activeTrackColor: AppTheme.brand,
+              inactiveTrackColor: c.divider,
+              thumbColor: AppTheme.brand,
+              overlayColor: AppTheme.brand.withValues(alpha: 0.12),
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 4),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 11),
+            ),
+            child: Slider(
+              value: value,
+              onChanged: onChanged,
+              onChangeEnd: onChangeEnd,
+            ),
+          ),
+        ),
+        const SizedBox(width: 4),
+        SizedBox(
+          width: 70,
+          child: Text(
+            '${_durationString(position.inSeconds)}/'
+            '${total.inSeconds > 0 ? _durationString(total.inSeconds) : '--:--'}',
+            textAlign: TextAlign.right,
+            style: TextStyle(fontSize: 11, color: c.textSecondary),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _profileRow(
     String icon,
     String title, {
     String? trailing,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
+    bool showChevron = true,
   }) {
     final c = context.colors;
     return GestureDetector(
@@ -564,7 +783,8 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
               ),
               if (trailing != null) ...[
                 const SizedBox(width: 12),
-                Flexible(
+                SizedBox(
+                  width: MediaQuery.sizeOf(context).width * 0.42,
                   child: Text(
                     trailing,
                     maxLines: 1,
@@ -575,7 +795,10 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
                 ),
               ],
               const SizedBox(width: 10),
-              Icon(sfIcon('chevron.right'), size: 16, color: c.textTertiary),
+              if (showChevron)
+                Icon(sfIcon('chevron.right'), size: 16, color: c.textTertiary)
+              else
+                const SizedBox(width: 16),
             ],
           ),
         ),

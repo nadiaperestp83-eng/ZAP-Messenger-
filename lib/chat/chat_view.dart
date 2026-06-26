@@ -83,6 +83,7 @@ class _ChatViewState extends State<ChatView> {
   String _reactionTab = 'standard'; // 'standard' or a custom-emoji pack id
   int _lastCount = 0;
   bool _didInitialScroll = false; // one-time entry positioning has run
+  bool _initialPaintReady = false; // hide first layout until entry scroll lands
   bool _showJumpDown = false; // scrolled up → show jump-to-bottom button
   bool _bannerDismissed = false; // "N条新消息" banner dismissed / caught up
   Timer? _bannerTimer; // auto-hides the banner a few seconds after it appears
@@ -96,6 +97,7 @@ class _ChatViewState extends State<ChatView> {
   bool _autoTranslateRunning = false;
   bool _loadingLatestFromAnchor = false;
   String _autoTranslateConfigKey = '';
+  int _bottomSettleGeneration = 0;
   final Set<int> _autoTranslateInFlight = {};
   final Set<int> _autoTranslateFailed = {};
   final Set<int> _selectedMessageIds = {};
@@ -163,19 +165,24 @@ class _ChatViewState extends State<ChatView> {
         if (!mounted || !_scroll.hasClients) return;
         _scroll.animateTo(
           _scroll.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOut,
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
         );
       });
     }
   }
 
-  void _animateToBottom() {
+  void _animateToBottom({bool animated = true}) {
     if (!_scroll.hasClients) return;
+    final target = _scroll.position.maxScrollExtent;
+    if (!animated || (target - _scroll.position.pixels).abs() < 48) {
+      _scroll.jumpTo(target);
+      return;
+    }
     _scroll.animateTo(
-      _scroll.position.maxScrollExtent,
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOut,
+      target,
+      duration: const Duration(milliseconds: 160),
+      curve: Curves.easeOutCubic,
     );
   }
 
@@ -253,7 +260,9 @@ class _ChatViewState extends State<ChatView> {
           (wasNearBottom || newest.isOutgoing);
       if (shouldAutoScroll) {
         _liveNewMessageCount = 0;
-        WidgetsBinding.instance.addPostFrameCallback((_) => _animateToBottom());
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _animateToBottom(animated: newest.isOutgoing),
+        );
       } else if (_didInitialScroll &&
           restore == null &&
           appendedNewest &&
@@ -276,12 +285,21 @@ class _ChatViewState extends State<ChatView> {
     // Telegram-style entry: once the initial history (incl. the unread
     // boundary) is loaded, jump to the first unread message — or stay at the
     // bottom when caught up. Runs exactly once per chat open.
-    if (!_didInitialScroll && _vm.initialLoaded && _vm.messages.isNotEmpty) {
+    if (!_didInitialScroll && _vm.initialLoaded) {
       _didInitialScroll = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _initialScroll();
-        _scheduleShortTranscriptFill();
-      });
+      if (_vm.messages.isEmpty) {
+        _initialPaintReady = true;
+      } else {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _initialScroll();
+          _scheduleShortTranscriptFill();
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && !_initialPaintReady) {
+              setState(() => _initialPaintReady = true);
+            }
+          });
+        });
+      }
     } else if (_vm.initialLoaded && _vm.messages.isNotEmpty) {
       _scheduleShortTranscriptFill();
     }
@@ -316,7 +334,7 @@ class _ChatViewState extends State<ChatView> {
       return;
     }
     if (context.read<ThemeController>().openChatsAtLatest) {
-      _scrollToBottom();
+      _scrollToBottom(settle: true);
       return;
     }
     final i = _firstUnreadIndex();
@@ -336,15 +354,30 @@ class _ChatViewState extends State<ChatView> {
         Scrollable.ensureVisible(
           ctx,
           alignment: 0.12, // divider just below the top of the viewport
-          duration: const Duration(milliseconds: 180),
+          duration: Duration.zero,
         );
       }
     });
   }
 
-  void _scrollToBottom() {
+  void _scrollToBottom({bool settle = false}) {
     if (!_scroll.hasClients) return;
     _scroll.jumpTo(_scroll.position.maxScrollExtent);
+    if (settle) _settleAtBottom();
+  }
+
+  void _settleAtBottom() {
+    final generation = ++_bottomSettleGeneration;
+    () async {
+      for (var i = 0; i < 8; i++) {
+        await WidgetsBinding.instance.endOfFrame;
+        if (!mounted || generation != _bottomSettleGeneration) return;
+        if (_scroll.hasClients) {
+          _scroll.jumpTo(_scroll.position.maxScrollExtent);
+        }
+        await Future<void>.delayed(Duration(milliseconds: i < 3 ? 16 : 48));
+      }
+    }();
   }
 
   void _scheduleShortTranscriptFill() {
@@ -389,7 +422,7 @@ class _ChatViewState extends State<ChatView> {
 
   void _positionAfterShortFill() {
     if (context.read<ThemeController>().openChatsAtLatest) {
-      _scrollToBottom();
+      _scrollToBottom(settle: true);
       return;
     }
     final i = _firstUnreadIndex();
@@ -862,22 +895,7 @@ class _ChatViewState extends State<ChatView> {
     if (!translation.enabled) return true;
     final sourceText = _translationSourceText(message);
     if (sourceText.trim().isEmpty) return true;
-    final sourceLanguage = TranslationController.detectLanguage(sourceText);
-    if (translation.shouldSkipDetectedLanguage(sourceLanguage)) {
-      if (showErrors) showToast(context, '已设为不翻译该语言');
-      return true;
-    }
     final targetLanguage = _translationTargetLanguage(translation);
-    final normalizedSource = TranslationController.normalizeLanguageCode(
-      sourceLanguage,
-    );
-    final normalizedTarget = TranslationController.normalizeLanguageCode(
-      targetLanguage,
-    );
-    if (normalizedSource != null && normalizedSource == normalizedTarget) {
-      if (showErrors) showToast(context, '已是目标语言');
-      return true;
-    }
     try {
       if (translation.provider == TranslationProvider.tdlib) {
         await _vm.translateMessage(message.id, targetLanguage);
@@ -888,7 +906,7 @@ class _ChatViewState extends State<ChatView> {
           () => ThirdPartyTranslationApi.translate(
             provider: translation.provider,
             text: sourceText,
-            sourceLanguageCode: sourceLanguage,
+            sourceLanguageCode: 'autodetect',
             targetLanguageCode: targetLanguage,
             lingvaEndpoint: translation.lingvaEndpoint,
             libreTranslateEndpoint: translation.libreTranslateEndpoint,
@@ -1004,8 +1022,6 @@ class _ChatViewState extends State<ChatView> {
         body: _joinScreenBody(),
       );
     }
-    final showPinnedTodo =
-        !_isSelecting && _vm.pinnedMessage != null && !_vm.pinnedDismissed;
     return Scaffold(
       backgroundColor: c.chatBackground,
       // The input bar manages the keyboard inset itself (see ChatInputBar), so
@@ -1027,35 +1043,10 @@ class _ChatViewState extends State<ChatView> {
                 child: Column(
                   children: [
                     _isSelecting ? _selectionHeader() : _header(),
-                    Expanded(
-                      child: Stack(
-                        children: [
-                          _transcript(),
-                          if (showPinnedTodo)
-                            Positioned(
-                              top: 12,
-                              left: 12,
-                              right: 12,
-                              child: _pinnedBar(_vm.pinnedMessage!),
-                            ),
-                          if (_isSelecting) _selectToHereButton(),
-                          if ((_vm.unreadCount + _liveNewMessageCount) > 0 &&
-                              !_bannerDismissed)
-                            Positioned(
-                              top: showPinnedTodo ? 72 : 8,
-                              right: 12,
-                              child: _newMessagesBanner(),
-                            ),
-                          if (_showJumpDown)
-                            Positioned(
-                              right: 16,
-                              bottom: 12,
-                              child: _jumpToBottomButton(),
-                            ),
-                        ],
-                      ),
+                    Expanded(child: _initialVisibility(_transcriptLayer())),
+                    _initialVisibility(
+                      _isSelecting ? _selectionActionBar() : _composerArea(),
                     ),
-                    _isSelecting ? _selectionActionBar() : _composerArea(),
                   ],
                 ),
               ),
@@ -1064,6 +1055,37 @@ class _ChatViewState extends State<ChatView> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _initialVisibility(Widget child) {
+    if (_initialPaintReady) return child;
+    return IgnorePointer(child: Opacity(opacity: 0, child: child));
+  }
+
+  Widget _transcriptLayer() {
+    final showPinnedTodo =
+        !_isSelecting && _vm.pinnedMessage != null && !_vm.pinnedDismissed;
+    return Stack(
+      children: [
+        _transcript(),
+        if (showPinnedTodo)
+          Positioned(
+            top: 12,
+            left: 12,
+            right: 12,
+            child: _pinnedBar(_vm.pinnedMessage!),
+          ),
+        if (_isSelecting) _selectToHereButton(),
+        if ((_vm.unreadCount + _liveNewMessageCount) > 0 && !_bannerDismissed)
+          Positioned(
+            top: showPinnedTodo ? 72 : 8,
+            right: 12,
+            child: _newMessagesBanner(),
+          ),
+        if (_showJumpDown)
+          Positioned(right: 16, bottom: 12, child: _jumpToBottomButton()),
+      ],
     );
   }
 
@@ -1633,8 +1655,8 @@ class _ChatViewState extends State<ChatView> {
         await Scrollable.ensureVisible(
           ctx,
           alignment: 0.3,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
         );
         if (mounted && _scrollTargetId == messageId) {
           setState(() => _scrollTargetId = null);
@@ -1665,8 +1687,8 @@ class _ChatViewState extends State<ChatView> {
       color: context.colors.chatBackground,
       child: ListView.builder(
         controller: _scroll,
-        physics: const AlwaysScrollableScrollPhysics(
-          parent: BouncingScrollPhysics(),
+        physics: const ClampingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
         ),
         scrollCacheExtent: const ScrollCacheExtent.pixels(900),
         padding: const EdgeInsets.symmetric(vertical: 8),

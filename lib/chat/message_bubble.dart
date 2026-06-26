@@ -473,6 +473,8 @@ class _MessageBubbleState extends State<MessageBubble>
       body = _videoContent(outgoing);
     } else if (message.image != null) {
       body = _imageContent(message.image!, outgoing);
+    } else if (message.music != null) {
+      body = _musicCard(message.music!, outgoing);
     } else if (message.location != null) {
       body = _locationBubble(message.location!);
     } else if (message.voice != null) {
@@ -807,6 +809,258 @@ class _MessageBubbleState extends State<MessageBubble>
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  // MARK: - Music
+
+  Widget _musicCard(MessageMusic music, bool outgoing) {
+    final c = context.colors;
+    final maxWidth = math.min(MediaQuery.sizeOf(context).width * 0.70, 300.0);
+    final caption = _caption();
+    final performer = (music.performer ?? '').trim();
+    final canPlay = music.file != null;
+    final toggle = canPlay ? () => _voice.toggleAudio(music.file) : null;
+    final card = AnimatedBuilder(
+      animation: _voice,
+      builder: (context, _) {
+        final active = _voice.isActive(music.file);
+        final playing = active && _voice.isPlaying;
+        final loading = active && _voice.isLoading;
+        final total = active && _voice.total.inMilliseconds > 0
+            ? _voice.total
+            : Duration(seconds: music.duration);
+        final position = active ? _voice.position : Duration.zero;
+        final totalMs = math.max(1, total.inMilliseconds);
+        final value = (position.inMilliseconds / totalMs).clamp(0.0, 1.0);
+
+        return Container(
+          width: maxWidth,
+          decoration: BoxDecoration(
+            color: c.card,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: c.divider, width: 0.5),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 13, 14, 12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            music.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 18,
+                              height: 1.25,
+                              fontWeight: FontWeight.w500,
+                              color: c.textPrimary,
+                            ),
+                          ),
+                          if (performer.isNotEmpty) ...[
+                            const SizedBox(height: 10),
+                            Text(
+                              performer,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 16,
+                                height: 1.25,
+                                color: c.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    _musicCover(
+                      music.cover,
+                      loading: loading,
+                      playing: playing,
+                      onTap: toggle,
+                    ),
+                  ],
+                ),
+              ),
+              Divider(height: 1, thickness: 0.5, color: c.divider),
+              active || loading
+                  ? _musicProgressBar(
+                      value: value.toDouble(),
+                      position: position,
+                      total: total,
+                      canPlay: canPlay,
+                      onChanged: (v) => _voice.seekFraction(v, music.duration),
+                      onChangeEnd: (v) =>
+                          _voice.seekFraction(v, music.duration),
+                    )
+                  : _musicProviderBar(),
+            ],
+          ),
+        );
+      },
+    );
+    if (caption == null) return card;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: outgoing
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
+      children: [
+        card,
+        const SizedBox(height: 4),
+        _textBubble(caption, outgoing),
+      ],
+    );
+  }
+
+  Widget _musicProviderBar() {
+    final c = context.colors;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 7, 14, 8),
+      child: Row(
+        children: [
+          Container(
+            width: 18,
+            height: 18,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFF3B30),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Icon(
+              Icons.music_note_rounded,
+              color: Colors.white,
+              size: 14,
+            ),
+          ),
+          const SizedBox(width: 7),
+          Text(
+            'Netemo music',
+            style: TextStyle(fontSize: 14, color: c.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _musicProgressBar({
+    required double value,
+    required Duration position,
+    required Duration total,
+    required bool canPlay,
+    required ValueChanged<double> onChanged,
+    required ValueChanged<double> onChangeEnd,
+  }) {
+    final c = context.colors;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 0, 14, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 3,
+                activeTrackColor: AppTheme.brand,
+                inactiveTrackColor: c.divider,
+                thumbColor: AppTheme.brand,
+                overlayColor: AppTheme.brand.withValues(alpha: 0.12),
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 13),
+              ),
+              child: Slider(
+                value: value,
+                onChanged: canPlay ? onChanged : null,
+                onChangeEnd: canPlay ? onChangeEnd : null,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          SizedBox(
+            width: 70,
+            child: Text(
+              '${_durationString(position.inSeconds)}/'
+              '${total.inSeconds > 0 ? _durationString(total.inSeconds) : '--:--'}',
+              textAlign: TextAlign.right,
+              style: TextStyle(fontSize: 11, color: c.textSecondary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _musicCover(
+    TdFileRef? cover, {
+    required bool loading,
+    required bool playing,
+    VoidCallback? onTap,
+  }) {
+    final c = context.colors;
+    const size = 58.0;
+    final art = cover != null
+        ? TDImage(
+            photo: cover,
+            cornerRadius: 8,
+            fit: BoxFit.cover,
+            cacheWidth: _cachePx(size),
+            cacheHeight: _cachePx(size),
+          )
+        : Container(
+            color: AppTheme.brand.withValues(alpha: 0.12),
+            alignment: Alignment.center,
+            child: Icon(Icons.album_rounded, size: 28, color: c.textSecondary),
+          );
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            art,
+            Container(color: Colors.black.withValues(alpha: 0.18)),
+            Center(
+              child: Container(
+                width: 32,
+                height: 32,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.42),
+                  shape: BoxShape.circle,
+                ),
+                child: loading
+                    ? const SizedBox(
+                        width: 15,
+                        height: 15,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation(Colors.white),
+                        ),
+                      )
+                    : Icon(
+                        sfIcon(playing ? 'pause.fill' : 'play.fill'),
+                        color: Colors.white,
+                        size: 17,
+                      ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1590,7 +1844,7 @@ class _MessageBubbleState extends State<MessageBubble>
           child: Row(
             children: [
               GestureDetector(
-                onTap: () => _voice.toggle(voice.file),
+                onTap: () => _voice.toggleVoice(voice.file),
                 child: Container(
                   width: 32,
                   height: 32,

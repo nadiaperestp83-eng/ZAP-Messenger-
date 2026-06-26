@@ -38,6 +38,20 @@ enum UnreadBadgeMode {
   final IconData icon;
 }
 
+enum UnreadBadgeOverflowMode {
+  capped('超过 99 显示 99+', Icons.notifications_active_outlined),
+  exact('超过 99 显示实际数字', Icons.pin_outlined);
+
+  const UnreadBadgeOverflowMode(this.label, this.icon);
+  final String label;
+  final IconData icon;
+
+  String format(int count) => switch (this) {
+    UnreadBadgeOverflowMode.capped => count > 99 ? '99+' : '$count',
+    UnreadBadgeOverflowMode.exact => '$count',
+  };
+}
+
 enum AppFontChoice {
   system('系统默认', '消息预览 Aa 123', cjk: true),
   apple('Apple / 苹方', '消息预览 Aa 123', cjk: true),
@@ -586,6 +600,7 @@ class ThemeController extends ChangeNotifier {
     _circularGroupAvatars = _prefs.getBool(_groupAvatarCircleKey) ?? true;
     _showChatFolderFilter = _prefs.getBool(_chatFolderFilterKey) ?? false;
     _showChatListSearch = _prefs.getBool(_chatListSearchKey) ?? true;
+    _hideSidebarPhone = _prefs.getBool(_hideSidebarPhoneKey) ?? false;
     _showMemberTags = _prefs.getBool(_memberTagsKey) ?? false;
     _showPremiumNameColors = _prefs.getBool(_premiumNameColorsKey) ?? true;
     _showPremiumEmojiStatus = _prefs.getBool(_premiumEmojiStatusKey) ?? true;
@@ -602,6 +617,10 @@ class ThemeController extends ChangeNotifier {
       (m) => m.name == _prefs.getString(_unreadBadgeModeKey),
       orElse: () => UnreadBadgeMode.messages,
     );
+    _unreadBadgeOverflowMode = UnreadBadgeOverflowMode.values.firstWhere(
+      (m) => m.name == _prefs.getString(_unreadBadgeOverflowModeKey),
+      orElse: () => UnreadBadgeOverflowMode.capped,
+    );
     AppTheme.applyBrand(_brandColor); // before the first MaterialApp build
   }
 
@@ -616,6 +635,7 @@ class ThemeController extends ChangeNotifier {
   static const _groupAvatarCircleKey = 'circularGroupAvatars';
   static const _chatFolderFilterKey = 'showChatFolderFilter';
   static const _chatListSearchKey = 'showChatListSearch';
+  static const _hideSidebarPhoneKey = 'hideSidebarPhone';
   static const _memberTagsKey = 'showMemberTags';
   static const _premiumNameColorsKey = 'showPremiumNameColors';
   static const _premiumEmojiStatusKey = 'showPremiumEmojiStatus';
@@ -626,6 +646,7 @@ class ThemeController extends ChangeNotifier {
   static const _groupImageMessagesKey = 'groupImageMessages';
   static const _showMomentsTabKey = 'showMomentsTab';
   static const _unreadBadgeModeKey = 'unreadBadgeMode';
+  static const _unreadBadgeOverflowModeKey = 'unreadBadgeOverflowMode';
 
   static const double minFontScale = 0.8;
   static const double maxFontScale = 1.4;
@@ -644,6 +665,7 @@ class ThemeController extends ChangeNotifier {
   late bool _circularGroupAvatars;
   bool _showChatFolderFilter = false;
   bool _showChatListSearch = true;
+  bool _hideSidebarPhone = false;
   bool _showMemberTags = false;
   bool _showPremiumNameColors = true;
   bool _showPremiumEmojiStatus = true;
@@ -654,6 +676,7 @@ class ThemeController extends ChangeNotifier {
   bool _groupImageMessages = false;
   bool _showMomentsTab = true;
   late UnreadBadgeMode _unreadBadgeMode;
+  late UnreadBadgeOverflowMode _unreadBadgeOverflowMode;
 
   AppearanceMode get mode => _mode;
   ThemeMode get themeMode => _mode.themeMode;
@@ -671,6 +694,7 @@ class ThemeController extends ChangeNotifier {
   bool get circularGroupAvatars => _circularGroupAvatars;
   bool get showChatFolderFilter => _showChatFolderFilter;
   bool get showChatListSearch => _showChatListSearch;
+  bool get hideSidebarPhone => _hideSidebarPhone;
   bool get showMemberTags => _showMemberTags;
   bool get showPremiumNameColors => _showPremiumNameColors;
   bool get showPremiumEmojiStatus => _showPremiumEmojiStatus;
@@ -681,6 +705,8 @@ class ThemeController extends ChangeNotifier {
   bool get groupImageMessages => _groupImageMessages;
   bool get showMomentsTab => _showMomentsTab;
   UnreadBadgeMode get unreadBadgeMode => _unreadBadgeMode;
+  UnreadBadgeOverflowMode get unreadBadgeOverflowMode =>
+      _unreadBadgeOverflowMode;
 
   /// App-wide text scale factor, applied at the root via MediaQuery.textScaler.
   double get fontScale => _fontScale;
@@ -759,6 +785,12 @@ class ThemeController extends ChangeNotifier {
     notifyListeners();
   }
 
+  set hideSidebarPhone(bool value) {
+    _hideSidebarPhone = value;
+    _prefs.setBool(_hideSidebarPhoneKey, value);
+    notifyListeners();
+  }
+
   set showMemberTags(bool value) {
     _showMemberTags = value;
     _prefs.setBool(_memberTagsKey, value);
@@ -816,6 +848,12 @@ class ThemeController extends ChangeNotifier {
   set unreadBadgeMode(UnreadBadgeMode value) {
     _unreadBadgeMode = value;
     _prefs.setString(_unreadBadgeModeKey, value.name);
+    notifyListeners();
+  }
+
+  set unreadBadgeOverflowMode(UnreadBadgeOverflowMode value) {
+    _unreadBadgeOverflowMode = value;
+    _prefs.setString(_unreadBadgeOverflowModeKey, value.name);
     notifyListeners();
   }
 }

@@ -6,6 +6,8 @@
 //  `UIComponents` (NavHeader, badges, dividers, separators, bubble shape).
 //
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -94,30 +96,149 @@ class NavHeader extends StatelessWidget {
   }
 }
 
-/// Red unread-count pill.
-class UnreadBadge extends StatelessWidget {
-  const UnreadBadge({super.key, required this.count, this.muted = false});
+/// Unread-count pill. Muted/archived chats use the neutral gray variant.
+class UnreadBadge extends StatefulWidget {
+  const UnreadBadge({
+    super.key,
+    required this.count,
+    this.muted = false,
+    this.onClear,
+  });
   final int count;
   final bool muted;
+  final VoidCallback? onClear;
+
+  @override
+  State<UnreadBadge> createState() => _UnreadBadgeState();
+}
+
+class _UnreadBadgeState extends State<UnreadBadge> {
+  static const _breakDistance = 46.0;
+  Offset _dragOffset = Offset.zero;
+  bool _dragging = false;
+  bool _broken = false;
+
+  Color _color(BuildContext context) =>
+      widget.muted ? context.colors.textTertiary : AppTheme.unreadBadge;
+
+  void _reset() {
+    if (!mounted) return;
+    setState(() {
+      _dragging = false;
+      _broken = false;
+      _dragOffset = Offset.zero;
+    });
+  }
+
+  void _finishDrag() {
+    if (widget.onClear != null && _dragOffset.distance >= _breakDistance) {
+      setState(() {
+        _dragging = false;
+        _broken = true;
+      });
+      widget.onClear!();
+      Future<void>.delayed(const Duration(milliseconds: 180), _reset);
+      return;
+    }
+    _reset();
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (count <= 0) return const SizedBox.shrink();
+    if (widget.count <= 0 || _broken) return const SizedBox.shrink();
+    final color = _color(context);
+    final overflowMode = context
+        .watch<ThemeController>()
+        .unreadBadgeOverflowMode;
+    final label = overflowMode.format(widget.count);
+    final body = _UnreadBadgeBody(label: label, color: color);
+    if (widget.onClear == null) return body;
+    final visualSize = _visualSize(context, label);
+    final hitWidth = math.max(AppMetric.hitTarget, visualSize.width);
+    final origin = Offset(
+      hitWidth - visualSize.width / 2,
+      visualSize.height / 2,
+    );
+
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: (_) => setState(() => _dragging = true),
+      onPointerMove: (event) => setState(() => _dragOffset += event.delta),
+      onPointerCancel: (_) => _reset(),
+      onPointerUp: (_) => _finishDrag(),
+      child: SizedBox(
+        width: hitWidth,
+        height: AppMetric.hitTarget,
+        child: CustomPaint(
+          painter: _UnreadBadgeMorphPainter(
+            color: color,
+            offset: _dragOffset,
+            origin: origin,
+            broken: _dragOffset.distance >= _breakDistance,
+          ),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned(
+                right: 0,
+                top: 0,
+                child: Transform.translate(
+                  offset: _dragOffset,
+                  child: AnimatedScale(
+                    duration: const Duration(milliseconds: 100),
+                    scale: _dragging ? 1.06 : 1,
+                    child: body,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Size _visualSize(BuildContext context, String label) {
+    const style = TextStyle(
+      fontSize: AppTextSize.caption,
+      fontWeight: FontWeight.w600,
+    );
+    final painter = TextPainter(
+      text: TextSpan(text: label, style: style),
+      textDirection: Directionality.of(context),
+      maxLines: 1,
+    )..layout();
+    final horizontalPadding = label.length > 1 ? (AppSpacing.xs + 1) * 2 : 0.0;
+    return Size(
+      math.max(AppMetric.unreadBadgeMin, painter.width + horizontalPadding),
+      AppMetric.unreadBadgeMin,
+    );
+  }
+}
+
+class _UnreadBadgeBody extends StatelessWidget {
+  const _UnreadBadgeBody({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       constraints: const BoxConstraints(
         minWidth: AppMetric.unreadBadgeMin,
         minHeight: AppMetric.unreadBadgeMin,
       ),
       padding: EdgeInsets.symmetric(
-        horizontal: count > 9 ? AppSpacing.xs + 1 : 0,
+        horizontal: label.length > 1 ? AppSpacing.xs + 1 : 0,
       ),
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: muted ? context.colors.textTertiary : AppTheme.unreadBadge,
+        color: color,
         borderRadius: BorderRadius.circular(AppMetric.unreadBadgeMin / 2),
       ),
       child: Text(
-        count > 99 ? '99+' : '$count',
+        label,
         style: const TextStyle(
           fontSize: AppTextSize.caption,
           fontWeight: FontWeight.w600,
@@ -126,6 +247,62 @@ class UnreadBadge extends StatelessWidget {
       ),
     );
   }
+}
+
+class _UnreadBadgeMorphPainter extends CustomPainter {
+  const _UnreadBadgeMorphPainter({
+    required this.color,
+    required this.offset,
+    required this.origin,
+    required this.broken,
+  });
+
+  final Color color;
+  final Offset offset;
+  final Offset origin;
+  final bool broken;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final distance = offset.distance;
+    if (broken || distance < 3 || size.isEmpty) return;
+
+    final target = origin + offset;
+    final progress = (distance / _UnreadBadgeState._breakDistance).clamp(
+      0.0,
+      1.0,
+    );
+    final width = math.max(
+      6.0,
+      AppMetric.unreadBadgeMin * (0.72 - progress * 0.36),
+    );
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = width
+      ..strokeCap = StrokeCap.round;
+
+    final normal = distance == 0
+        ? Offset.zero
+        : Offset(-offset.dy / distance, offset.dx / distance);
+    final bend = normal * math.min(7.0, distance * 0.16);
+    final path = Path()
+      ..moveTo(origin.dx, origin.dy)
+      ..quadraticBezierTo(
+        origin.dx + offset.dx * 0.5 + bend.dx,
+        origin.dy + offset.dy * 0.5 + bend.dy,
+        target.dx,
+        target.dy,
+      );
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _UnreadBadgeMorphPainter oldDelegate) =>
+      oldDelegate.color != color ||
+      oldDelegate.offset != offset ||
+      oldDelegate.origin != origin ||
+      oldDelegate.broken != broken;
 }
 
 /// Group role tag: owner = yellow, admin = teal, member = purple.
@@ -174,14 +351,15 @@ class RoleTag extends StatelessWidget {
 
 /// Small solid dot (muted unread indicator / tab markers).
 class RedDot extends StatelessWidget {
-  const RedDot({super.key, this.size = 9});
+  const RedDot({super.key, this.size = 9, this.muted = false});
   final double size;
+  final bool muted;
   @override
   Widget build(BuildContext context) => Container(
     width: size,
     height: size,
     decoration: BoxDecoration(
-      color: AppTheme.unreadBadge,
+      color: muted ? context.colors.textTertiary : AppTheme.unreadBadge,
       shape: BoxShape.circle,
     ),
   );

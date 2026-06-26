@@ -15,6 +15,11 @@ mobile-native messaging interface.
 > [Terms of Service](https://telegram.org/tos) and API
 > [Terms](https://core.telegram.org/api/terms).
 
+## TestFlight
+
+iOS beta builds are available on TestFlight:
+<https://testflight.apple.com/join/tVC8WkbW>
+
 ## The name
 
 A play on small units of mass, by way of the penguin:

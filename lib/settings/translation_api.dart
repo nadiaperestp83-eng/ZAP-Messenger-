@@ -48,9 +48,6 @@ class ThirdPartyTranslationApi {
     String source,
     String target,
   ) async {
-    if (source == 'auto') {
-      throw TranslationApiException('MyMemory 需要可识别的源语言');
-    }
     final chunks = _chunksByUtf8Bytes(text, 480);
     final translated = <String>[];
     for (final chunk in chunks) {
@@ -121,7 +118,7 @@ class ThirdPartyTranslationApi {
     final normalized = TranslationController.normalizeLanguageCode(
       languageCode,
     );
-    if (normalized == null) return 'auto';
+    if (normalized == null || normalized == 'auto') return 'autodetect';
     return _apiLanguage(normalized);
   }
 

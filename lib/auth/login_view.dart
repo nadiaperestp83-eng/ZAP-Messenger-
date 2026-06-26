@@ -381,13 +381,22 @@ class _LoginViewState extends State<LoginView> {
           _code.text.isNotEmpty,
           () => auth.submitCode(_code.text),
         ),
-        const SizedBox(height: 16),
-        Center(
-          child: TextButton(
-            onPressed: auth.resendCode,
-            child: Text(
-              '重新发送验证码',
-              style: TextStyle(fontSize: 13, color: AppTheme.brand),
+        const SizedBox(height: 12),
+        OutlinedButton(
+          onPressed: auth.isWorking ? null : auth.resendCode,
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size.fromHeight(44),
+            side: BorderSide(color: AppTheme.brand.withValues(alpha: 0.45)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          child: Text(
+            '重新发送验证码',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: auth.isWorking ? c.textTertiary : AppTheme.brand,
             ),
           ),
         ),

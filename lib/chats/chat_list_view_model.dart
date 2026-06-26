@@ -280,6 +280,61 @@ class ChatListViewModel extends ChangeNotifier {
     });
   }
 
+  void markRead(ChatSummary chat) {
+    if (chat.unreadCount <= 0 && !chat.isMarkedUnread) return;
+    final previousUnread = chat.unreadCount;
+    final previousMarked = chat.isMarkedUnread;
+    _mutate(chat.id, (s) {
+      s.unreadCount = 0;
+      s.isMarkedUnread = false;
+    });
+    _resort();
+
+    if (previousMarked) {
+      _client.send({
+        '@type': 'toggleChatIsMarkedAsUnread',
+        'chat_id': chat.id,
+        'is_marked_as_unread': false,
+      });
+    }
+    if (previousUnread <= 0) return;
+    _forceReadChat(chat).catchError((_) {
+      _mutate(chat.id, (s) {
+        s.unreadCount = previousUnread;
+        s.isMarkedUnread = previousMarked;
+      });
+      _resort();
+    });
+  }
+
+  void markAllRead() {
+    final targets = [
+      ..._chats,
+      ..._archived,
+    ].where((chat) => chat.unreadCount > 0 || chat.isMarkedUnread).toList();
+    for (final chat in targets) {
+      markRead(chat);
+    }
+  }
+
+  Future<void> _forceReadChat(ChatSummary chat) async {
+    var messageId = chat.lastMessageId;
+    if (messageId <= 0) {
+      final raw = await _client.query({'@type': 'getChat', 'chat_id': chat.id});
+      final fresh = TDParse.chat(raw);
+      if (fresh == null) return;
+      messageId = fresh.lastMessageId;
+      _map[chat.id] = fresh;
+    }
+    if (messageId <= 0) return;
+    await _client.query({
+      '@type': 'viewMessages',
+      'chat_id': chat.id,
+      'message_ids': [messageId],
+      'force_read': true,
+    });
+  }
+
   void deleteChat(ChatSummary chat) {
     _client.send({
       '@type': 'deleteChatHistory',
@@ -324,6 +379,7 @@ class ChatListViewModel extends ChangeNotifier {
         _mutate(id, (s) {
           final last = update.obj('last_message');
           if (last != null) {
+            s.lastMessageId = last.int64('id') ?? s.lastMessageId;
             s.date = last.integer('date') ?? s.date;
             final content = last.obj('content');
             if (content != null) {
@@ -331,6 +387,7 @@ class ChatListViewModel extends ChangeNotifier {
             }
           } else {
             s.lastMessage = '';
+            s.lastMessageId = 0;
             s.date = 0;
             s.lastSender = null;
           }

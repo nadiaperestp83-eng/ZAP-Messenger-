@@ -20,7 +20,6 @@ import '../chat/custom_emoji.dart';
 import '../components/drawer_controller.dart' as dc;
 import '../components/photo_avatar.dart';
 import '../components/sf_symbols.dart';
-import '../components/ui_components.dart';
 import '../contacts/add_people_view.dart';
 import '../contacts/create_group_view.dart';
 import '../profile/emoji_status_picker.dart';
@@ -37,10 +36,17 @@ import 'search_view.dart';
 
 class ChatListController extends ChangeNotifier {
   int _scrollToFirstUnreadRequests = 0;
+  int _markAllReadRequests = 0;
   int get scrollToFirstUnreadRequests => _scrollToFirstUnreadRequests;
+  int get markAllReadRequests => _markAllReadRequests;
 
   void scrollToFirstUnread() {
     _scrollToFirstUnreadRequests++;
+    notifyListeners();
+  }
+
+  void markAllRead() {
+    _markAllReadRequests++;
     notifyListeners();
   }
 }
@@ -69,6 +75,7 @@ class _ChatListViewState extends State<ChatListView> {
   bool _showFilterMenu = false;
   int? _pendingScrollToFirstUnreadRequest;
   int _lastHandledScrollToFirstUnreadRequest = 0;
+  int _lastHandledMarkAllReadRequest = 0;
   int _pendingScrollAttempts = 0;
 
   @override
@@ -77,7 +84,7 @@ class _ChatListViewState extends State<ChatListView> {
     _model.onAppear();
     _model.addListener(_onModel);
     _scrollController.addListener(_onScroll);
-    widget.controller?.addListener(_onScrollToFirstUnreadRequest);
+    widget.controller?.addListener(_onControllerRequest);
     _loadMe();
     // Keep the header's name/status/photo live — TDLib emits updateUser for us
     // when the status or profile changes.
@@ -91,8 +98,8 @@ class _ChatListViewState extends State<ChatListView> {
   void didUpdateWidget(covariant ChatListView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller == widget.controller) return;
-    oldWidget.controller?.removeListener(_onScrollToFirstUnreadRequest);
-    widget.controller?.addListener(_onScrollToFirstUnreadRequest);
+    oldWidget.controller?.removeListener(_onControllerRequest);
+    widget.controller?.addListener(_onControllerRequest);
   }
 
   void _onModel() {
@@ -118,7 +125,7 @@ class _ChatListViewState extends State<ChatListView> {
   @override
   void dispose() {
     _userSub?.cancel();
-    widget.controller?.removeListener(_onScrollToFirstUnreadRequest);
+    widget.controller?.removeListener(_onControllerRequest);
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _model.removeListener(_onModel);
@@ -209,7 +216,13 @@ class _ChatListViewState extends State<ChatListView> {
     _model.selectFilter(filter);
   }
 
-  void _onScrollToFirstUnreadRequest() {
+  void _onControllerRequest() {
+    final markAllRequest = widget.controller?.markAllReadRequests ?? 0;
+    if (markAllRequest > _lastHandledMarkAllReadRequest) {
+      _lastHandledMarkAllReadRequest = markAllRequest;
+      _model.markAllRead();
+    }
+
     final request = widget.controller?.scrollToFirstUnreadRequests ?? 0;
     if (request <= _lastHandledScrollToFirstUnreadRequest) return;
     _pendingScrollToFirstUnreadRequest = request;
@@ -538,10 +551,7 @@ class _ChatListViewState extends State<ChatListView> {
     );
   }
 
-  Widget _rowContainer(Widget child) => Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [child, const InsetDivider(leadingInset: 78)],
-  );
+  Widget _rowContainer(Widget child) => child;
 
   Widget _swipeRow(ChatSummary chat) {
     return ChatSwipeRow(
@@ -566,7 +576,9 @@ class _ChatListViewState extends State<ChatListView> {
           onTap: () => _model.deleteChat(chat),
         ),
       ],
-      child: _rowContainer(ChatRowView(chat: chat)),
+      child: _rowContainer(
+        ChatRowView(chat: chat, onClearUnread: () => _model.markRead(chat)),
+      ),
     );
   }
 
@@ -574,10 +586,18 @@ class _ChatListViewState extends State<ChatListView> {
     return GestureDetector(
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => ArchivedChatsView(chats: _model.archived),
+          builder: (_) => ArchivedChatsView(
+            chats: _model.archived,
+            onClearUnread: _model.markRead,
+          ),
         ),
       ),
-      child: _rowContainer(GroupAssistantRow(archived: _model.archived)),
+      child: _rowContainer(
+        GroupAssistantRow(
+          archived: _model.archived,
+          onClearUnread: _model.markAllRead,
+        ),
+      ),
     );
   }
 
@@ -829,6 +849,7 @@ class _ChatSwipeRowState extends State<ChatSwipeRow>
   Animation<double>? _animation;
   VoidCallback? _animationListener;
   double _offset = 0;
+  bool _longPressHighlighted = false;
 
   double get _totalWidth => widget.actions.length * _buttonWidth;
 
@@ -949,6 +970,12 @@ class _ChatSwipeRowState extends State<ChatSwipeRow>
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () => _offset != 0 ? _close() : widget.onTap(),
+              onLongPressStart: (_) =>
+                  setState(() => _longPressHighlighted = true),
+              onLongPressEnd: (_) =>
+                  setState(() => _longPressHighlighted = false),
+              onLongPressCancel: () =>
+                  setState(() => _longPressHighlighted = false),
               onHorizontalDragStart: (_) => _stopAnimation(),
               onHorizontalDragUpdate: (d) {
                 setState(
@@ -967,7 +994,21 @@ class _ChatSwipeRowState extends State<ChatSwipeRow>
                   }
                 }
               },
-              child: widget.child,
+              child: Stack(
+                children: [
+                  widget.child,
+                  if (_longPressHighlighted)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.08),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ],

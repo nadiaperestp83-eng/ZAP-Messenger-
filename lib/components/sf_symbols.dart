@@ -27,6 +27,8 @@ const Map<String, IconData> _map = {
   'line.3.horizontal': Icons.menu,
   'arrow.left': Icons.arrow_back,
   'arrow.up': CupertinoIcons.arrow_up,
+  'arrow.down.to.line': Icons.vertical_align_bottom_rounded,
+  'slash.circle': CupertinoIcons.slash_circle,
 
   // Tabs
   'message.fill': CupertinoIcons.chat_bubble_2_fill,

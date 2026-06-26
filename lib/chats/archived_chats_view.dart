@@ -20,14 +20,16 @@ import 'chat_row_view.dart';
 
 /// Collapsed "群助手" entry summarizing archived chats.
 class GroupAssistantRow extends StatelessWidget {
-  const GroupAssistantRow({super.key, required this.archived});
+  const GroupAssistantRow({
+    super.key,
+    required this.archived,
+    this.onClearUnread,
+  });
   final List<ChatSummary> archived;
+  final VoidCallback? onClearUnread;
 
   ChatSummary? get _latest => archived.isEmpty ? null : archived.first;
   int get _totalUnread => archived.fold(0, (a, c) => a + c.unreadCount);
-  bool get _hasUnmutedUnread =>
-      archived.any((c) => c.unreadCount > 0 && !c.isMuted);
-
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
@@ -61,11 +63,12 @@ class GroupAssistantRow extends StatelessWidget {
                 ),
                 if (_totalUnread > 0)
                   Positioned(
-                    right: -AppSpacing.sm,
-                    top: -(AppSpacing.xs + 1),
+                    right: 0,
+                    top: 0,
                     child: UnreadBadge(
                       count: _totalUnread,
-                      muted: !_hasUnmutedUnread,
+                      muted: true,
+                      onClear: onClearUnread,
                     ),
                   ),
               ],
@@ -111,8 +114,9 @@ class GroupAssistantRow extends StatelessWidget {
 }
 
 class ArchivedChatsView extends StatelessWidget {
-  const ArchivedChatsView({super.key, required this.chats});
+  const ArchivedChatsView({super.key, required this.chats, this.onClearUnread});
   final List<ChatSummary> chats;
+  final ValueChanged<ChatSummary>? onClearUnread;
 
   @override
   Widget build(BuildContext context) {
@@ -128,21 +132,19 @@ class ArchivedChatsView extends StatelessWidget {
               itemCount: chats.length,
               itemBuilder: (context, i) {
                 final chat = chats[i];
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              ChatView(chatId: chat.id, title: chat.title),
-                        ),
-                      ),
-                      child: ChatRowView(chat: chat),
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          ChatView(chatId: chat.id, title: chat.title),
                     ),
-                    const InsetDivider(leadingInset: 78),
-                  ],
+                  ),
+                  child: ChatRowView(
+                    chat: chat,
+                    archived: true,
+                    onClearUnread: () => onClearUnread?.call(chat),
+                  ),
                 );
               },
             ),

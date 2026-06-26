@@ -11,12 +11,13 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_sound/flutter_sound.dart';
+import 'package:logger/logger.dart' show Level;
 
 import '../tdlib/td_image_loader.dart';
 import '../tdlib/td_models.dart';
 
 class VoicePlayer extends ChangeNotifier {
-  final FlutterSoundPlayer _player = FlutterSoundPlayer();
+  FlutterSoundPlayer? _player;
   bool isPlaying = false;
   bool isLoading = false;
   Duration position = Duration.zero;
@@ -28,35 +29,48 @@ class VoicePlayer extends ChangeNotifier {
   bool _disposed = false;
   StreamSubscription<PlaybackDisposition>? _progress;
 
+  FlutterSoundPlayer get _sound =>
+      _player ??= FlutterSoundPlayer(logLevel: Level.warning);
+
   /// True when this player is the one bound to [file] (playing or paused).
   bool isActive(TdFileRef? file) => file != null && _fileId == file.id;
 
   Future<void> _ensureOpen() async {
     if (_opened) return;
-    await _player.openPlayer();
-    await _player.setSubscriptionDuration(const Duration(milliseconds: 60));
+    final player = _sound;
+    await player.openPlayer();
+    await player.setSubscriptionDuration(const Duration(milliseconds: 60));
     _opened = true;
   }
 
-  Future<void> toggle(TdFileRef? file) async {
+  Future<void> toggleVoice(TdFileRef? file) =>
+      _toggle(file, codec: Codec.opusOGG);
+
+  Future<void> toggleAudio(TdFileRef? file) =>
+      _toggle(file, codec: Codec.defaultCodec);
+
+  Future<void> _toggle(TdFileRef? file, {required Codec codec}) async {
     if (file == null) return;
 
     // Same note already loaded → pause / resume.
-    if (_fileId == file.id && (_player.isPlaying || _player.isPaused)) {
-      if (_player.isPlaying) {
-        await _player.pausePlayer();
+    final player = _player;
+    if (_fileId == file.id &&
+        player != null &&
+        (player.isPlaying || player.isPaused)) {
+      if (player.isPlaying) {
+        await player.pausePlayer();
         isPlaying = false;
       } else {
-        await _player.resumePlayer();
+        await player.resumePlayer();
         isPlaying = true;
       }
       notifyListeners();
       return;
     }
 
-    if (_player.isPlaying || _player.isPaused) {
+    if (player != null && (player.isPlaying || player.isPaused)) {
       try {
-        await _player.stopPlayer();
+        await player.stopPlayer();
       } catch (_) {}
     }
 
@@ -70,14 +84,15 @@ class VoicePlayer extends ChangeNotifier {
     }
     _fileId = file.id;
     _path = path;
-    await _start(0);
+    await _start(0, codec: codec);
   }
 
-  Future<void> _start(int fromMs) async {
+  Future<void> _start(int fromMs, {required Codec codec}) async {
     try {
       await _ensureOpen();
+      final player = _sound;
       _progress?.cancel();
-      _progress = _player.onProgress?.listen((e) {
+      _progress = player.onProgress?.listen((e) {
         position = e.position;
         if (e.duration.inMilliseconds > 0) total = e.duration;
         notifyListeners();
@@ -85,9 +100,9 @@ class VoicePlayer extends ChangeNotifier {
       isPlaying = true;
       position = Duration(milliseconds: fromMs);
       notifyListeners();
-      await _player.startPlayer(
+      await player.startPlayer(
         fromURI: _path,
-        codec: Codec.opusOGG,
+        codec: codec,
         whenFinished: () {
           isPlaying = false;
           position = Duration.zero;
@@ -95,7 +110,7 @@ class VoicePlayer extends ChangeNotifier {
         },
       );
       if (fromMs > 0) {
-        await _player.seekToPlayer(Duration(milliseconds: fromMs));
+        await player.seekToPlayer(Duration(milliseconds: fromMs));
       }
     } catch (_) {
       isPlaying = false;
@@ -113,9 +128,10 @@ class VoicePlayer extends ChangeNotifier {
     final target = Duration(milliseconds: (dur.inMilliseconds * f).round());
     position = target;
     notifyListeners();
-    if (_opened && (_player.isPlaying || _player.isPaused)) {
+    final player = _player;
+    if (_opened && player != null && (player.isPlaying || player.isPaused)) {
       try {
-        await _player.seekToPlayer(target);
+        await player.seekToPlayer(target);
       } catch (_) {}
     }
   }
@@ -124,7 +140,7 @@ class VoicePlayer extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _progress?.cancel();
-    if (_opened) _player.closePlayer();
+    if (_opened) _player?.closePlayer();
     super.dispose();
   }
 }
