@@ -11,6 +11,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../settings/keyword_blocker.dart';
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
 import '../tdlib/td_models.dart';
@@ -60,6 +61,13 @@ class MessageSenderOption {
   }
 }
 
+class _DraftMention {
+  const _DraftMention({required this.text, required this.userId});
+
+  final String text;
+  final int userId;
+}
+
 class ChatViewModel extends ChangeNotifier {
   ChatViewModel({
     required this.chatId,
@@ -71,6 +79,7 @@ class ChatViewModel extends ChangeNotifier {
   final int? initialMessageId;
 
   List<ChatMessage> messages = [];
+  List<ChatMessage> _allMessages = [];
   String peerTitle;
   TdFileRef? peerPhoto;
   bool isGroup = false;
@@ -79,6 +88,7 @@ class ChatViewModel extends ChangeNotifier {
   String meName = '我';
   TdFileRef? mePhoto;
   String draft = '';
+  final List<_DraftMention> _draftMentions = [];
   ChatMessage? replyTo;
   List<MessageSenderOption> availableMessageSenders = const [];
   MessageSenderOption? selectedMessageSender;
@@ -112,6 +122,7 @@ class ChatViewModel extends ChangeNotifier {
   final TdClient _client = TdClient.shared;
   StreamSubscription? _sub;
   bool _isLoadingOlder = false;
+  bool _hasOlderHistory = true;
   int? _restoreTopId;
   int? _pendingScrollToId;
 
@@ -140,6 +151,8 @@ class ChatViewModel extends ChangeNotifier {
 
   bool isRead(ChatMessage m) => m.isOutgoing && m.id <= lastReadOutboxId;
   bool get canChooseMessageSender => availableMessageSenders.length > 1;
+  bool get canLoadOlder =>
+      !_isLoadingOlder && _allMessages.isNotEmpty && _hasOlderHistory;
 
   final Map<int, _SenderInfo> _senderCache = {};
   final Set<int> _resolvingSenders = {};
@@ -162,6 +175,8 @@ class ChatViewModel extends ChangeNotifier {
   void onAppear() {
     _client.send({'@type': 'openChat', 'chat_id': chatId});
     _subscribeToUpdates();
+    KeywordBlocker.shared.removeListener(_applyKeywordFilter);
+    KeywordBlocker.shared.addListener(_applyKeywordFilter);
     () async {
       await _loadMe();
       await _loadChatHeader();
@@ -303,6 +318,7 @@ class ChatViewModel extends ChangeNotifier {
   void onDisappear() {
     _sub?.cancel();
     _sub = null;
+    KeywordBlocker.shared.removeListener(_applyKeywordFilter);
     _client.send({'@type': 'closeChat', 'chat_id': chatId});
   }
 
@@ -321,6 +337,7 @@ class ChatViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
+    KeywordBlocker.shared.removeListener(_applyKeywordFilter);
     _sub?.cancel();
     _typingTimer?.cancel();
     super.dispose();
@@ -339,13 +356,26 @@ class ChatViewModel extends ChangeNotifier {
 
   void setDraft(String value) {
     draft = value;
+    _draftMentions.removeWhere((m) => !draft.contains(m.text));
   }
 
-  /// Appends an "@name " mention to the composer (long-press an avatar).
-  void insertMention(String name) {
-    if (name.isEmpty) return;
+  /// Appends an "@name " mention to the composer (long-press an avatar), backed
+  /// by a user-id entity so Telegram doesn't resolve the text as a public user.
+  void insertMention(ChatMessage message) {
+    final name = message.senderName?.trim() ?? '';
+    final userId = message.senderId;
+    if (name.isEmpty || userId == null || userId <= 0) return;
+    _insertMention(name, userId);
+  }
+
+  void _insertMention(String name, int userId) {
+    final mention = '@$name';
+    if (_draftMentions.any((m) => m.text == mention && m.userId == userId)) {
+      return;
+    }
     final sep = (draft.isEmpty || draft.endsWith(' ')) ? '' : ' ';
-    draft = '$draft$sep@$name ';
+    draft = '$draft$sep$mention ';
+    _draftMentions.add(_DraftMention(text: mention, userId: userId));
     notifyListeners();
   }
 
@@ -378,7 +408,9 @@ class ChatViewModel extends ChangeNotifier {
   /// (offsets in UTF-16 of [text], which already has the fallback chars).
   void sendFormatted(String text, List<Map<String, dynamic>> entities) {
     if (text.trim().isEmpty) return;
+    final allEntities = [...entities, ..._mentionEntitiesFor(text, entities)];
     draft = '';
+    _draftMentions.clear();
     final request = <String, dynamic>{
       '@type': 'sendMessage',
       'chat_id': chatId,
@@ -387,7 +419,7 @@ class ChatViewModel extends ChangeNotifier {
         'text': {
           '@type': 'formattedText',
           'text': text,
-          if (entities.isNotEmpty) 'entities': entities,
+          if (allEntities.isNotEmpty) 'entities': allEntities,
         },
       },
     };
@@ -410,10 +442,48 @@ class ChatViewModel extends ChangeNotifier {
         isGroup &&
         !message.isOutgoing &&
         (message.senderName?.isNotEmpty ?? false)) {
-      final mention = '@${message.senderName} ';
-      if (!draft.contains(mention)) draft = mention + draft;
+      final userId = message.senderId;
+      if (userId != null && userId > 0) {
+        _insertMention(message.senderName!, userId);
+      }
     }
     notifyListeners();
+  }
+
+  List<Map<String, dynamic>> _mentionEntitiesFor(
+    String text,
+    List<Map<String, dynamic>> existing,
+  ) {
+    final out = <Map<String, dynamic>>[];
+    final occupied = existing.map((e) {
+      final offset = e.integer('offset') ?? 0;
+      final length = e.integer('length') ?? 0;
+      return (offset, offset + length);
+    }).toList();
+    for (final mention in _draftMentions) {
+      var start = 0;
+      while (start < text.length) {
+        final offset = text.indexOf(mention.text, start);
+        if (offset < 0) break;
+        final end = offset + mention.text.length;
+        final overlaps = occupied.any((r) => offset < r.$2 && end > r.$1);
+        if (!overlaps) {
+          out.add({
+            '@type': 'textEntity',
+            'offset': offset,
+            'length': mention.text.length,
+            'type': {
+              '@type': 'textEntityTypeMentionName',
+              'user_id': mention.userId,
+            },
+          });
+          occupied.add((offset, end));
+          break;
+        }
+        start = end;
+      }
+    }
+    return out;
   }
 
   void sendPhoto(String path) {
@@ -441,6 +511,20 @@ class ChatViewModel extends ChangeNotifier {
           'video': {'@type': 'inputFileLocal', 'path': path},
           'supports_streaming': true,
         },
+      },
+    });
+  }
+
+  void sendAnimation(String path) {
+    _client.send({
+      '@type': 'sendMessage',
+      'chat_id': chatId,
+      'input_message_content': {
+        '@type': 'inputMessageAnimation',
+        'animation': {'@type': 'inputFileLocal', 'path': path},
+        'duration': 0,
+        'width': 0,
+        'height': 0,
       },
     });
   }
@@ -601,6 +685,70 @@ class ChatViewModel extends ChangeNotifier {
     });
   }
 
+  void sendKeyboardButtonText(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return;
+    _client.send({
+      '@type': 'sendMessage',
+      'chat_id': chatId,
+      'input_message_content': {
+        '@type': 'inputMessageText',
+        'text': {'@type': 'formattedText', 'text': trimmed},
+      },
+    });
+  }
+
+  Future<Map<String, dynamic>> answerCallbackButton(
+    int messageId,
+    MessageButton button,
+  ) {
+    return _client.query({
+      '@type': 'getCallbackQueryAnswer',
+      'chat_id': chatId,
+      'message_id': messageId,
+      'payload': {
+        '@type': 'callbackQueryPayloadData',
+        'data': button.data ?? '',
+      },
+    });
+  }
+
+  Future<void> translateMessage(int messageId, String toLanguageCode) async {
+    _setTranslationLoading(messageId, true);
+    try {
+      final formatted = await _client.query({
+        '@type': 'translateMessageText',
+        'chat_id': chatId,
+        'message_id': messageId,
+        'to_language_code': toLanguageCode,
+      });
+      _replaceTranslation(
+        messageId,
+        formatted.str('text') ?? '',
+        TDParse.textEntities(formatted),
+        toLanguageCode,
+      );
+    } catch (_) {
+      _setTranslationLoading(messageId, false);
+      rethrow;
+    }
+  }
+
+  Future<void> translateMessageExternally(
+    int messageId,
+    String toLanguageCode,
+    Future<String> Function() translate,
+  ) async {
+    _setTranslationLoading(messageId, true);
+    try {
+      final translated = await translate();
+      _replaceTranslation(messageId, translated, const [], toLanguageCode);
+    } catch (_) {
+      _setTranslationLoading(messageId, false);
+      rethrow;
+    }
+  }
+
   // MARK: - Message actions (long-press menu)
 
   Future<void> forward(int messageId, int targetChatId) async {
@@ -678,15 +826,14 @@ class ChatViewModel extends ChangeNotifier {
 
   // MARK: - Paging
 
-  void loadOlder() {
-    if (_isLoadingOlder || messages.isEmpty) return;
+  Future<bool> loadOlder() async {
+    if (!canLoadOlder) return false;
     _isLoadingOlder = true;
-    _fetchHistory(
-      messages.first.id,
-      0,
-      30,
-      isOlder: true,
-    ).whenComplete(() => _isLoadingOlder = false);
+    try {
+      return await _fetchHistory(_allMessages.first.id, 0, 30, isOlder: true);
+    } finally {
+      _isLoadingOlder = false;
+    }
   }
 
   // MARK: - Header
@@ -880,15 +1027,15 @@ class ChatViewModel extends ChangeNotifier {
 
   Future<void> _loadInitialHistory() async {
     await _fetchHistory(0, 0, 40);
-    if (messages.isEmpty) return;
+    if (_allMessages.isEmpty) return;
     // Telegram-style entry: open at the first unread message. Page older until
     // a read message precedes the first unread (so the divider is loaded with
     // context above it). Bounded so a large backlog can't stall the open — the
     // view falls back to the bottom if the boundary still isn't reached.
     if (unreadCount > 0 && lastReadInboxId > 0) {
       var guard = 0;
-      while (messages.first.id > lastReadInboxId && guard < 6) {
-        final before = messages.first.id;
+      while (_allMessages.first.id > lastReadInboxId && guard < 6) {
+        final before = _allMessages.first.id;
         await _fetchHistory(
           before,
           0,
@@ -896,11 +1043,11 @@ class ChatViewModel extends ChangeNotifier {
           isOlder: true,
           restorePosition: false,
         );
-        if (messages.first.id == before) break; // no older messages left
+        if (_allMessages.first.id == before) break; // no older messages left
         guard++;
       }
     } else if (messages.length < 12) {
-      await _fetchHistory(messages.first.id, 0, 40);
+      await _fetchHistory(_allMessages.first.id, 0, 40);
     }
   }
 
@@ -933,7 +1080,9 @@ class ChatViewModel extends ChangeNotifier {
     } catch (_) {}
 
     if (batch.isEmpty) return false;
+    _allMessages = [];
     messages = [];
+    _hasOlderHistory = true;
     anchoredHistory = true;
     _pendingScrollToId = messageId;
     _merge(batch);
@@ -944,7 +1093,7 @@ class ChatViewModel extends ChangeNotifier {
     return messages.any((m) => m.id == messageId);
   }
 
-  Future<void> _fetchHistory(
+  Future<bool> _fetchHistory(
     int fromMessageId,
     int offset,
     int limit, {
@@ -952,6 +1101,7 @@ class ChatViewModel extends ChangeNotifier {
     bool restorePosition = true,
   }) async {
     final anchor = messages.isNotEmpty ? messages.first.id : null;
+    final allAnchor = _allMessages.isNotEmpty ? _allMessages.first.id : null;
     Map<String, dynamic> response;
     try {
       response = await _client.query({
@@ -963,7 +1113,7 @@ class ChatViewModel extends ChangeNotifier {
         'only_local': false,
       });
     } catch (_) {
-      return;
+      return false;
     }
 
     final parsed =
@@ -971,19 +1121,24 @@ class ChatViewModel extends ChangeNotifier {
             .map(TDParse.message)
             .whereType<ChatMessage>()
             .toList();
-    if (parsed.isEmpty) return;
+    if (parsed.isEmpty) {
+      if (isOlder || fromMessageId != 0) _hasOlderHistory = false;
+      return false;
+    }
 
     _merge(parsed);
     if (isOlder &&
         restorePosition &&
         anchor != null &&
-        messages.first.id != anchor) {
+        allAnchor != null &&
+        _allMessages.first.id != allAnchor) {
       _restoreTopId = anchor;
     }
     _resolveSendersIfNeeded(parsed);
     _resolveRepliesIfNeeded(parsed);
     _resolveForwardsIfNeeded(parsed);
     _resolveServiceUsersIfNeeded(parsed);
+    return true;
   }
 
   // MARK: - Live updates
@@ -1016,7 +1171,24 @@ class ChatViewModel extends ChangeNotifier {
         final messageId = update.int64('message_id');
         final content = update.obj('new_content');
         if (messageId == null || content == null) return;
-        _replaceText(messageId, TDParse.messageText(content));
+        final ft = _formattedTextForContent(content);
+        _replaceText(
+          messageId,
+          TDParse.messageText(content),
+          entities: TDParse.textEntities(ft),
+          customEmoji: TDParse.customEmojiEntities(ft),
+          linkPreview: TDParse.linkPreview(content.obj('link_preview')),
+          updateLinkPreview: true,
+        );
+
+      case 'updateMessageReplyMarkup':
+        if (update.int64('chat_id') != chatId) return;
+        final messageId = update.int64('message_id');
+        if (messageId == null) return;
+        _replaceButtonRows(
+          messageId,
+          TDParse.messageButtonRows(update.obj('reply_markup')),
+        );
 
       case 'updateDeleteMessages':
         if (update.int64('chat_id') != chatId) return;
@@ -1258,9 +1430,21 @@ class ChatViewModel extends ChangeNotifier {
 
   // MARK: - Merge / mutate
 
+  bool _isBlockedMessage(ChatMessage message) {
+    if (message.isOutgoing || message.isService) return false;
+    return KeywordBlocker.shared.matches(message.text);
+  }
+
+  void _applyKeywordFilter() {
+    messages =
+        _allMessages.where((message) => !_isBlockedMessage(message)).toList()
+          ..sort((a, b) => a.id.compareTo(b.id));
+    notifyListeners();
+  }
+
   void _merge(List<ChatMessage> incoming) {
     if (incoming.isEmpty) return;
-    final byId = {for (final m in messages) m.id: m};
+    final byId = {for (final m in _allMessages) m.id: m};
     for (final message in incoming) {
       final existing = byId[message.id];
       if (existing != null) {
@@ -1271,21 +1455,90 @@ class ChatViewModel extends ChangeNotifier {
       }
       byId[message.id] = message;
     }
-    messages = byId.values.toList()..sort((a, b) => a.id.compareTo(b.id));
+    _allMessages = byId.values.toList()..sort((a, b) => a.id.compareTo(b.id));
+    _applyKeywordFilter();
+  }
+
+  Map<String, dynamic>? _formattedTextForContent(Map<String, dynamic> content) {
+    return switch (content.type) {
+      'messageText' => content.obj('text'),
+      'messagePhoto' || 'messageVideo' => content.obj('caption'),
+      _ => null,
+    };
+  }
+
+  void _replaceText(
+    int messageId,
+    String text, {
+    bool edited = false,
+    List<MessageTextEntity>? entities,
+    List<CustomEmojiEntity>? customEmoji,
+    MessageLinkPreview? linkPreview,
+    bool updateLinkPreview = false,
+  }) {
+    final index = messages.indexWhere((m) => m.id == messageId);
+    final allIndex = _allMessages.indexWhere((m) => m.id == messageId);
+    if (index < 0 && allIndex < 0) return;
+    final target = allIndex >= 0 ? _allMessages[allIndex] : messages[index];
+    target.text = text;
+    if (entities != null) target.textEntities = entities;
+    if (customEmoji != null) target.customEmoji = customEmoji;
+    if (updateLinkPreview) target.linkPreview = linkPreview;
+    if (edited) target.isEdited = true;
+    _applyKeywordFilter();
+  }
+
+  void _replaceButtonRows(int messageId, List<List<MessageButton>> buttonRows) {
+    final index = messages.indexWhere((m) => m.id == messageId);
+    final allIndex = _allMessages.indexWhere((m) => m.id == messageId);
+    if (index < 0 && allIndex < 0) return;
+    if (index >= 0) messages[index].buttonRows = buttonRows;
+    if (allIndex >= 0) _allMessages[allIndex].buttonRows = buttonRows;
     notifyListeners();
   }
 
-  void _replaceText(int messageId, String text, {bool edited = false}) {
-    final index = messages.indexWhere((m) => m.id == messageId);
-    if (index < 0) return;
-    messages[index].text = text;
-    if (edited) messages[index].isEdited = true;
+  void _setTranslationLoading(int messageId, bool loading) {
+    final target = _messageRefs(messageId);
+    if (target.isEmpty) return;
+    for (final message in target) {
+      message.isTranslating = loading;
+    }
     notifyListeners();
+  }
+
+  void _replaceTranslation(
+    int messageId,
+    String text,
+    List<MessageTextEntity> entities,
+    String languageCode,
+  ) {
+    final target = _messageRefs(messageId);
+    if (target.isEmpty) return;
+    for (final message in target) {
+      message.translationText = text;
+      message.translationEntities = entities;
+      message.translationLanguageCode = languageCode;
+      message.isTranslating = false;
+    }
+    notifyListeners();
+  }
+
+  List<ChatMessage> _messageRefs(int messageId) {
+    final refs = <ChatMessage>[];
+    final index = messages.indexWhere((m) => m.id == messageId);
+    final allIndex = _allMessages.indexWhere((m) => m.id == messageId);
+    if (index >= 0) refs.add(messages[index]);
+    if (allIndex >= 0 &&
+        (index < 0 || !identical(messages[index], _allMessages[allIndex]))) {
+      refs.add(_allMessages[allIndex]);
+    }
+    return refs;
   }
 
   void _removeMessages(List<int> ids) {
     if (ids.isEmpty) return;
     final removed = ids.toSet();
+    _allMessages.removeWhere((m) => removed.contains(m.id));
     messages.removeWhere((m) => removed.contains(m.id));
     if (replyTo != null && removed.contains(replyTo!.id)) replyTo = null;
     notifyListeners();

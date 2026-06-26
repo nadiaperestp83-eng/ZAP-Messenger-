@@ -14,6 +14,7 @@ import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
 import '../theme/app_theme.dart';
 import 'auto_delete_view.dart';
+import 'keyword_blocker_view.dart';
 import 'privacy_detail_views.dart';
 
 class PrivacySecurityView extends StatefulWidget {
@@ -149,6 +150,12 @@ class _PrivacySecurityViewState extends State<PrivacySecurityView> {
                     '黑名单',
                     '',
                     () => _open(const BlockedUsersView()),
+                  ),
+                  _Row(
+                    'nosign',
+                    '关键词屏蔽',
+                    '',
+                    () => _open(const KeywordBlockerView()),
                   ),
                   _Row(
                     'timer',

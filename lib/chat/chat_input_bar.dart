@@ -146,8 +146,19 @@ class _ChatInputBarState extends State<ChatInputBar> {
 
   Future<void> _prepareRecorder() async {
     if (_recorder != null) return;
-    final status = await Permission.microphone.request();
-    if (!status.isGranted) return;
+    var status = await Permission.microphone.status;
+    if (!status.isGranted && !status.isPermanentlyDenied) {
+      status = await Permission.microphone.request();
+    }
+    if (!status.isGranted) {
+      if (!mounted) return;
+      showToast(
+        context,
+        status.isPermanentlyDenied ? '请在系统设置中允许麦克风权限' : '需要麦克风权限',
+      );
+      if (status.isPermanentlyDenied) unawaited(openAppSettings());
+      return;
+    }
     final r = FlutterSoundRecorder();
     try {
       await r.openRecorder();
@@ -569,6 +580,8 @@ class _ChatInputBarState extends State<ChatInputBar> {
             lower.endsWith('.m4v');
         if (isVideo) {
           widget.vm.sendVideo(x.path);
+        } else if (_isGifPath(x.path) || lower.endsWith('.gif')) {
+          widget.vm.sendAnimation(x.path);
         } else {
           final edited = await _editImage(x.path);
           if (edited != null) widget.vm.sendPhoto(edited);
@@ -611,6 +624,10 @@ class _ChatInputBarState extends State<ChatInputBar> {
       if (mounted) showToast(context, '无法读取粘贴的图片');
       return;
     }
+    if (_isGifMime(content.mimeType)) {
+      await _sendAnimationBytes(data, content.mimeType);
+      return;
+    }
     await _editAndSendImageBytes(data, content.mimeType);
   }
 
@@ -624,13 +641,25 @@ class _ChatInputBarState extends State<ChatInputBar> {
         if (mounted) showToast(context, '剪贴板没有图片');
         return;
       }
-      await _editAndSendImageBytes(
-        data,
-        (image?['mimeType'] as String?) ?? 'image/png',
-      );
+      final mimeType = (image?['mimeType'] as String?) ?? 'image/png';
+      if (_isGifMime(mimeType)) {
+        await _sendAnimationBytes(data, mimeType);
+        return;
+      }
+      await _editAndSendImageBytes(data, mimeType);
     } catch (_) {
       if (mounted) showToast(context, '无法读取粘贴的图片');
     }
+  }
+
+  Future<void> _sendAnimationBytes(Uint8List data, String mimeType) async {
+    final dir = await getTemporaryDirectory();
+    final ext = _extensionForMime(mimeType);
+    final file = File(
+      '${dir.path}/mithka-animation-${DateTime.now().microsecondsSinceEpoch}.$ext',
+    );
+    await file.writeAsBytes(data, flush: true);
+    widget.vm.sendAnimation(file.path);
   }
 
   Future<void> _editAndSendImageBytes(Uint8List data, String mimeType) async {
@@ -662,12 +691,22 @@ class _ChatInputBarState extends State<ChatInputBar> {
     }
   }
 
+  bool _isGifPath(String path) => path.toLowerCase().endsWith('.gif');
+
+  bool _isGifMime(String mimeType) => mimeType.toLowerCase() == 'image/gif';
+
   /// 文件: pick an arbitrary document and send it.
   Future<void> _pickFile() async {
     try {
       final result = await FilePicker.platform.pickFiles();
       final path = result?.files.single.path;
-      if (path != null) widget.vm.sendDocument(path);
+      if (path != null) {
+        if (_isGifPath(path)) {
+          widget.vm.sendAnimation(path);
+        } else {
+          widget.vm.sendDocument(path);
+        }
+      }
     } catch (_) {
       _pickFailed('文件');
     }

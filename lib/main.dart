@@ -19,6 +19,8 @@ import 'auth/account_store.dart';
 import 'auth/auth_manager.dart';
 import 'components/drawer_controller.dart' as dc;
 import 'notifications/notification_controller.dart';
+import 'settings/keyword_blocker.dart';
+import 'settings/translation_controller.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_controller.dart';
 
@@ -33,6 +35,7 @@ Future<void> main() async {
     DeviceOrientation.portraitDown,
   ]);
   final prefs = await SharedPreferences.getInstance();
+  KeywordBlocker.shared.initialize(prefs);
   runApp(MithkaApp(prefs: prefs));
 }
 
@@ -47,6 +50,9 @@ class MithkaApp extends StatefulWidget {
 class _MithkaAppState extends State<MithkaApp> {
   late final AuthManager _auth = AuthManager();
   late final ThemeController _theme = ThemeController(widget.prefs);
+  late final TranslationController _translation = TranslationController(
+    widget.prefs,
+  );
   late final AccountStore _accounts = AccountStore(widget.prefs);
   late final dc.DrawerController _drawer = dc.DrawerController();
 
@@ -81,6 +87,7 @@ class _MithkaAppState extends State<MithkaApp> {
       providers: [
         ChangeNotifierProvider.value(value: _auth),
         ChangeNotifierProvider.value(value: _theme),
+        ChangeNotifierProvider.value(value: _translation),
         ChangeNotifierProvider.value(value: _accounts),
         ChangeNotifierProvider<dc.DrawerController>.value(value: _drawer),
       ],

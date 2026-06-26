@@ -3,7 +3,7 @@
 //
 //  The "我" side menu (slides in from the left, ~88% width). Redesigned to match
 //  QQ's drawer: an azure avatar banner → an edit-profile card → a vertical list
-//  of rows (相册 / 收藏 / 文件 / 外观 / 二维码) → account switcher → a bottom bar
+//  of rows (相册 / 收藏 / 文件 / 外观) → account switcher → a bottom bar
 //  (设置 · 夜间模式). Backed by real TDLib via ProfileViewModel + AccountStore.
 //
 
@@ -383,13 +383,6 @@ class _ProfileViewState extends State<ProfileView> {
               MaterialPageRoute(
                 builder: (_) =>
                     SharedMediaView(chatId: cid, title: '文件', initialTab: 1),
-              ),
-            );
-          }),
-          _row('qrcode', AppTheme.brand, '二维码名片', () {
-            _root.push(
-              MaterialPageRoute(
-                builder: (_) => QRCodeView(name: _vm.user?.name ?? '我'),
               ),
             );
           }),

@@ -56,6 +56,7 @@ const Map<String, IconData> _map = {
   'lock.shield.fill': CupertinoIcons.lock_shield_fill,
   'iphone': CupertinoIcons.device_phone_portrait,
   'globe': CupertinoIcons.globe,
+  'character.book.closed': Icons.translate,
   'questionmark.circle': CupertinoIcons.question_circle,
   'info.circle': CupertinoIcons.info_circle,
   'trash': CupertinoIcons.trash,

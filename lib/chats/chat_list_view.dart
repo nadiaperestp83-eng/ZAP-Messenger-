@@ -822,6 +822,8 @@ class _ChatSwipeRowState extends State<ChatSwipeRow>
   // active — a lazy `late` initializer would run on first access in dispose()
   // (for never-swiped rows) and crash on a deactivated-ancestor TickerMode lookup.
   late final AnimationController _controller;
+  Animation<double>? _animation;
+  VoidCallback? _animationListener;
   double _offset = 0;
 
   double get _totalWidth => widget.actions.length * _buttonWidth;
@@ -831,7 +833,7 @@ class _ChatSwipeRowState extends State<ChatSwipeRow>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 200),
+      duration: const Duration(milliseconds: 260),
     );
   }
 
@@ -846,22 +848,50 @@ class _ChatSwipeRowState extends State<ChatSwipeRow>
 
   @override
   void dispose() {
+    _clearAnimation();
     _controller.dispose();
     super.dispose();
   }
 
+  void _clearAnimation() {
+    final animation = _animation;
+    final listener = _animationListener;
+    if (animation != null && listener != null) {
+      animation.removeListener(listener);
+    }
+    _animation = null;
+    _animationListener = null;
+  }
+
+  void _stopAnimation() {
+    _controller.stop();
+    _clearAnimation();
+  }
+
   void _animateTo(double target) {
+    _stopAnimation();
     final anim = Tween<double>(
       begin: _offset,
       end: target,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
     void listener() => setState(() => _offset = anim.value);
+    _animation = anim;
+    _animationListener = listener;
     _controller.reset();
     anim.addListener(listener);
     _controller.forward().whenComplete(() {
-      anim.removeListener(listener);
+      _clearAnimation();
       _offset = target;
     });
+  }
+
+  double _rubberBandOffset(double value) {
+    if (value >= -_totalWidth && value <= 0) return value;
+    if (value < -_totalWidth) {
+      final extra = -value - _totalWidth;
+      return -_totalWidth - extra * 0.28;
+    }
+    return value * 0.28;
   }
 
   void _close() {
@@ -915,14 +945,15 @@ class _ChatSwipeRowState extends State<ChatSwipeRow>
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () => _offset != 0 ? _close() : widget.onTap(),
+              onHorizontalDragStart: (_) => _stopAnimation(),
               onHorizontalDragUpdate: (d) {
                 setState(
-                  () =>
-                      _offset = (_offset + d.delta.dx).clamp(-_totalWidth, 0.0),
+                  () => _offset = _rubberBandOffset(_offset + d.delta.dx),
                 );
               },
-              onHorizontalDragEnd: (_) {
-                if (_offset < -_totalWidth * 0.4) {
+              onHorizontalDragEnd: (d) {
+                final vx = d.primaryVelocity ?? 0;
+                if (vx < -520 || (vx <= 360 && _offset < -_totalWidth * 0.38)) {
                   _animateTo(-_totalWidth);
                   widget.onOpenChanged(widget.rowId);
                 } else {

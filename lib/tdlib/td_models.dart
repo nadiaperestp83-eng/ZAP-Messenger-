@@ -6,9 +6,9 @@
 //
 
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:dlibphonenumber/dlibphonenumber.dart';
+import 'package:flutter/foundation.dart';
 
 import 'json_helpers.dart';
 
@@ -105,6 +105,36 @@ class CustomEmojiEntity {
   final int offset;
   final int length;
   final int id;
+}
+
+/// A TDLib formattedText entity in message text/caption. Offsets and lengths
+/// are UTF-16 code units, matching Dart String indexing.
+class MessageTextEntity {
+  const MessageTextEntity({
+    required this.offset,
+    required this.length,
+    required this.type,
+    this.url,
+    this.userId,
+    this.customEmojiId,
+    this.language,
+  });
+
+  final int offset;
+  final int length;
+  final String type;
+  final String? url;
+  final int? userId;
+  final int? customEmojiId;
+  final String? language;
+
+  int get end => offset + length;
+  bool get isCustomEmoji => type == 'textEntityTypeCustomEmoji';
+  bool get isBlockQuote =>
+      type == 'textEntityTypeBlockQuote' ||
+      type == 'textEntityTypeExpandableBlockQuote';
+  bool get isExpandableBlockQuote =>
+      type == 'textEntityTypeExpandableBlockQuote';
 }
 
 /// One reaction bucket on a message (emoji or custom-emoji + count + chosen).
@@ -221,6 +251,13 @@ class ChatMessage {
     this.replyToMessageId,
     this.serviceUserIds = const [],
     this.customEmoji = const [],
+    this.textEntities = const [],
+    this.linkPreview,
+    this.translationText,
+    this.translationEntities = const [],
+    this.translationLanguageCode,
+    this.isTranslating = false,
+    this.buttonRows = const [],
     this.isEdited = false,
   });
 
@@ -273,6 +310,13 @@ class ChatMessage {
 
   // Inline custom (premium) emoji spans within `text`.
   List<CustomEmojiEntity> customEmoji;
+  List<MessageTextEntity> textEntities;
+  MessageLinkPreview? linkPreview;
+  String? translationText;
+  List<MessageTextEntity> translationEntities;
+  String? translationLanguageCode;
+  bool isTranslating;
+  List<List<MessageButton>> buttonRows;
 
   bool isEdited; // shows a "已编辑" tag
   List<MessageReaction> reactions = const [];
@@ -291,6 +335,78 @@ class ChatMessage {
   /// plain text and photos. Audio, voice, location, stickers, polls, files,
   /// videos, contacts and call logs are excluded.
   bool get canRepeat => isPlainText || isPhoto;
+}
+
+class MessageButton {
+  const MessageButton({
+    required this.text,
+    required this.type,
+    this.url,
+    this.data,
+    this.userId,
+    this.copyText,
+    this.switchInlineQuery,
+    this.isReplyKeyboard = false,
+  });
+
+  final String text;
+  final String type;
+  final String? url;
+  final String? data;
+  final int? userId;
+  final String? copyText;
+  final String? switchInlineQuery;
+  final bool isReplyKeyboard;
+
+  bool get isCallback =>
+      type == 'inlineKeyboardButtonTypeCallback' ||
+      type == 'inlineKeyboardButtonTypeCallbackWithPassword' ||
+      type == 'inlineKeyboardButtonTypeCallbackGame' ||
+      type == 'inlineKeyboardButtonTypeBuy';
+}
+
+class MessageLinkPreview {
+  const MessageLinkPreview({
+    required this.url,
+    required this.displayUrl,
+    required this.siteName,
+    required this.title,
+    required this.description,
+    this.descriptionEntities = const [],
+    this.image,
+    this.imageWidth,
+    this.imageHeight,
+    this.video,
+    this.videoDuration,
+    this.showLargeMedia = false,
+    this.showMediaAboveDescription = false,
+    this.showAboveText = false,
+    this.type = '',
+  });
+
+  final String url;
+  final String displayUrl;
+  final String siteName;
+  final String title;
+  final String description;
+  final List<MessageTextEntity> descriptionEntities;
+  final TdFileRef? image;
+  final int? imageWidth;
+  final int? imageHeight;
+  final TdFileRef? video;
+  final int? videoDuration;
+  final bool showLargeMedia;
+  final bool showMediaAboveDescription;
+  final bool showAboveText;
+  final String type;
+
+  bool get hasText =>
+      siteName.isNotEmpty ||
+      title.isNotEmpty ||
+      description.isNotEmpty ||
+      displayUrl.isNotEmpty;
+
+  bool get hasMedia => image != null || video != null;
 }
 
 class MessageDocument {
@@ -533,6 +649,9 @@ abstract final class TDParse {
         replyToMessageId: replyToMessageId,
         serviceUserIds: serviceUserIds(content, senderId),
         customEmoji: customEmojiEntities(ft),
+        textEntities: textEntities(ft),
+        linkPreview: linkPreview(content?.obj('link_preview')),
+        buttonRows: messageButtonRows(message.obj('reply_markup')),
         isEdited: (message.integer('edit_date') ?? 0) > 0,
       )
       ..reactions = reactionsFrom(message)
@@ -544,6 +663,143 @@ abstract final class TDParse {
   static String? _cleanString(String? value) {
     final text = value?.trim();
     return text == null || text.isEmpty ? null : text;
+  }
+
+  static MessageLinkPreview? linkPreview(Map<String, dynamic>? preview) {
+    if (preview == null) return null;
+    final type = preview.obj('type');
+    final media = linkPreviewMedia(type);
+    final description = preview.obj('description');
+    final link = MessageLinkPreview(
+      url: preview.str('url') ?? '',
+      displayUrl: preview.str('display_url') ?? '',
+      siteName: preview.str('site_name') ?? '',
+      title: preview.str('title') ?? '',
+      description: description?.str('text') ?? '',
+      descriptionEntities: textEntities(description),
+      image: media.image,
+      imageWidth: media.width,
+      imageHeight: media.height,
+      video: media.video,
+      videoDuration: media.videoDuration,
+      showLargeMedia: preview.boolean('show_large_media') ?? false,
+      showMediaAboveDescription:
+          preview.boolean('show_media_above_description') ?? false,
+      showAboveText: preview.boolean('show_above_text') ?? false,
+      type: type?.type ?? '',
+    );
+    return link.hasText || link.hasMedia ? link : null;
+  }
+
+  static MediaAttachment linkPreviewMedia(Map<String, dynamic>? type) {
+    if (type == null) return const MediaAttachment();
+    switch (type.type) {
+      case 'linkPreviewTypeArticle':
+      case 'linkPreviewTypePhoto':
+      case 'linkPreviewTypeBackground':
+      case 'linkPreviewTypeTheme':
+        return photoAttachment(type.obj('photo'));
+      case 'linkPreviewTypeVideo':
+      case 'linkPreviewTypeEmbeddedVideoPlayer':
+      case 'linkPreviewTypeExternalVideo':
+        return videoAttachment(type.obj('video'), type);
+      case 'linkPreviewTypeAnimation':
+      case 'linkPreviewTypeEmbeddedAnimationPlayer':
+        return animationAttachment(type.obj('animation'), type);
+      case 'linkPreviewTypeAlbum':
+        final media = type['media'];
+        if (media is List) {
+          for (final item in media.whereType<Map<String, dynamic>>()) {
+            final attachment = switch (item.type) {
+              'linkPreviewAlbumMediaPhoto' => photoAttachment(
+                item.obj('photo'),
+              ),
+              'linkPreviewAlbumMediaVideo' => videoAttachment(
+                item.obj('video'),
+                item,
+              ),
+              _ => const MediaAttachment(),
+            };
+            if (attachment.image != null || attachment.video != null) {
+              return attachment;
+            }
+          }
+        }
+      case 'linkPreviewTypeDocument':
+        final document = type.obj('document');
+        return MediaAttachment(
+          image: fileRef(document?.obj('thumbnail')?.obj('file')),
+        );
+      case 'linkPreviewTypeAudio':
+      case 'linkPreviewTypeEmbeddedAudioPlayer':
+      case 'linkPreviewTypeExternalAudio':
+        final audio = type.obj('audio');
+        return MediaAttachment(
+          image: fileRef(audio?.obj('album_cover_thumbnail')?.obj('file')),
+        );
+    }
+    return const MediaAttachment();
+  }
+
+  static MediaAttachment photoAttachment(Map<String, dynamic>? photo) {
+    if (photo == null) return const MediaAttachment();
+    final mini = decodeMiniThumb(photo.obj('minithumbnail'));
+    final sizes = photo.objects('sizes');
+    if (sizes == null || sizes.isEmpty) return const MediaAttachment();
+    final best = sizes.reduce(
+      (a, b) => (a.integer('width') ?? 0) >= (b.integer('width') ?? 0) ? a : b,
+    );
+    return MediaAttachment(
+      image: fileRef(best.obj('photo'), miniThumb: mini),
+      width: best.integer('width'),
+      height: best.integer('height'),
+    );
+  }
+
+  static MediaAttachment videoAttachment(
+    Map<String, dynamic>? video, [
+    Map<String, dynamic>? fallback,
+  ]) {
+    if (video == null) {
+      return MediaAttachment(
+        width: fallback?.integer('width'),
+        height: fallback?.integer('height'),
+        videoDuration: fallback?.integer('duration'),
+      );
+    }
+    final mini = decodeMiniThumb(video.obj('minithumbnail'));
+    return MediaAttachment(
+      image: fileRef(video.obj('thumbnail')?.obj('file'), miniThumb: mini),
+      video: fileRef(video.obj('video')),
+      videoDuration: video.integer('duration') ?? fallback?.integer('duration'),
+      width: video.integer('width') ?? fallback?.integer('width'),
+      height: video.integer('height') ?? fallback?.integer('height'),
+    );
+  }
+
+  static MediaAttachment animationAttachment(
+    Map<String, dynamic>? animation, [
+    Map<String, dynamic>? fallback,
+  ]) {
+    if (animation == null) {
+      return MediaAttachment(
+        width: fallback?.integer('width'),
+        height: fallback?.integer('height'),
+        videoDuration: fallback?.integer('duration'),
+      );
+    }
+    final mini = decodeMiniThumb(animation.obj('minithumbnail'));
+    final thumb =
+        fileRef(animation.obj('thumbnail')?.obj('file'), miniThumb: mini) ??
+        fileRef(animation.obj('animation'), miniThumb: mini);
+    return MediaAttachment(
+      image: thumb,
+      video: fileRef(animation.obj('animation'), miniThumb: mini),
+      videoDuration:
+          animation.integer('duration') ?? fallback?.integer('duration'),
+      width: animation.integer('width') ?? fallback?.integer('width'),
+      height: animation.integer('height') ?? fallback?.integer('height'),
+    );
   }
 
   /// Parses message.interaction_info.reactions into reaction buckets.
@@ -566,20 +822,89 @@ abstract final class TDParse {
     }).toList();
   }
 
+  static List<List<MessageButton>> messageButtonRows(
+    Map<String, dynamic>? replyMarkup,
+  ) {
+    if (replyMarkup == null) return const [];
+    final type = replyMarkup.type;
+    if (type != 'replyMarkupInlineKeyboard' &&
+        type != 'replyMarkupShowKeyboard') {
+      return const [];
+    }
+    final rows = replyMarkup['rows'];
+    if (rows is! List) return const [];
+    final out = <List<MessageButton>>[];
+    for (final row in rows) {
+      if (row is! List) continue;
+      final buttons = row
+          .whereType<Map<String, dynamic>>()
+          .map(
+            (button) => _messageButton(
+              button,
+              isReplyKeyboard: type == 'replyMarkupShowKeyboard',
+            ),
+          )
+          .whereType<MessageButton>()
+          .toList();
+      if (buttons.isNotEmpty) out.add(buttons);
+    }
+    return out;
+  }
+
+  static MessageButton? _messageButton(
+    Map<String, dynamic> button, {
+    required bool isReplyKeyboard,
+  }) {
+    final text = (button.str('text') ?? '').trim();
+    if (text.isEmpty) return null;
+    final type = button.obj('type');
+    final typeName = type?.type ?? '';
+    final loginUrl = type?.obj('url');
+    final webApp = type?.obj('web_app');
+    final copyText = type?.obj('copy_text')?.str('text');
+    return MessageButton(
+      text: text,
+      type: typeName,
+      url: type?.str('url') ?? loginUrl?.str('url') ?? webApp?.str('url'),
+      data: type?.str('data'),
+      userId: type?.int64('user_id'),
+      copyText: type?.str('text') ?? copyText,
+      switchInlineQuery: type?.str('query'),
+      isReplyKeyboard: isReplyKeyboard,
+    );
+  }
+
   /// Extracts textEntityTypeCustomEmoji spans from a formattedText object.
   static List<CustomEmojiEntity> customEmojiEntities(Map<String, dynamic>? ft) {
-    final entities = ft?.objects('entities');
-    if (entities == null) return const [];
-    final out = <CustomEmojiEntity>[];
-    for (final e in entities) {
+    return textEntities(ft)
+        .where((e) => e.customEmojiId != null)
+        .map((e) => CustomEmojiEntity(e.offset, e.length, e.customEmojiId!))
+        .toList();
+  }
+
+  static List<MessageTextEntity> textEntities(Map<String, dynamic>? ft) {
+    final raw = ft?.objects('entities');
+    if (raw == null) return const [];
+    final out = <MessageTextEntity>[];
+    for (final e in raw) {
       final type = e.obj('type');
-      if (type?.type != 'textEntityTypeCustomEmoji') continue;
-      final id = type?.int64('custom_emoji_id');
+      final typeName = type?.type;
       final offset = e.integer('offset');
       final length = e.integer('length');
-      if (id != null && offset != null && length != null) {
-        out.add(CustomEmojiEntity(offset, length, id));
+      if (typeName == null || offset == null || length == null || length <= 0) {
+        continue;
       }
+      out.add(
+        MessageTextEntity(
+          offset: offset,
+          length: length,
+          type: typeName,
+          url: type?.str('url'),
+          userId: type?.int64('user_id'),
+          customEmojiId: type?.int64('custom_emoji_id'),
+          language: type?.str('language'),
+        ),
+      );
     }
     return out;
   }
@@ -693,11 +1018,14 @@ abstract final class TDParse {
         final anim = content.obj('animation');
         if (anim != null) {
           final mini = decodeMiniThumb(anim.obj('minithumbnail'));
-          final ref =
+          final thumb =
               fileRef(anim.obj('thumbnail')?.obj('file'), miniThumb: mini) ??
               fileRef(anim.obj('animation'), miniThumb: mini);
+          final animation = fileRef(anim.obj('animation'), miniThumb: mini);
           return MediaAttachment(
-            image: ref,
+            image: thumb,
+            video: animation,
+            videoDuration: anim.integer('duration'),
             width: anim.integer('width'),
             height: anim.integer('height'),
           );
@@ -752,15 +1080,19 @@ abstract final class TDParse {
       case 'messageVoiceNote':
         return '[语音]';
       case 'messageAudio':
-        return '[音乐]';
+        final caption = content.obj('caption')?.str('text') ?? '';
+        return caption.isEmpty ? '[音乐]' : caption;
       case 'messageDocument':
+        final caption = content.obj('caption')?.str('text') ?? '';
+        if (caption.isNotEmpty) return caption;
         final name = content.obj('document')?.str('file_name');
         return name != null ? '[文件] $name' : '[文件]';
       case 'messageSticker':
         final emoji = content.obj('sticker')?.str('emoji') ?? '';
         return emoji.isEmpty ? '[表情]' : '[表情$emoji]';
       case 'messageAnimation':
-        return '[动画表情]';
+        final caption = content.obj('caption')?.str('text') ?? '';
+        return caption.isEmpty ? '[动画表情]' : caption;
       case 'messageAnimatedEmoji':
         return content.obj('animated_emoji')?.str('emoji') ?? '[动画表情]';
       case 'messageLocation':
@@ -771,6 +1103,9 @@ abstract final class TDParse {
         return '[名片]';
       case 'messagePoll':
         return '[投票]';
+      case 'messageChecklist':
+        final title = content.obj('list')?.obj('title')?.str('text') ?? '';
+        return title.isEmpty ? '[清单]' : title;
       case 'messageCall':
         return (content.boolean('is_video') ?? false) ? '[视频通话]' : '[语音通话]';
       case 'messageDice':
@@ -787,10 +1122,23 @@ abstract final class TDParse {
         return '[抽奖]';
       case 'messagePaidMedia':
         return '[付费内容]';
+      case 'messagePaidMessagePriceChanged':
+        return '[付费消息设置已更改]';
       case 'messageGift':
       case 'messagePremiumGiftCode':
       case 'messageGiftedPremium':
+      case 'messageGiftedStars':
+      case 'messageGiftedTon':
+      case 'messageUpgradedGift':
+      case 'messageRefundedUpgradedGift':
         return '[礼物]';
+      case 'messageSuggestedPostInfo':
+      case 'messageSuggestedPostApproved':
+      case 'messageSuggestedPostApprovalFailed':
+      case 'messageSuggestedPostDeclined':
+      case 'messageSuggestedPostPaid':
+      case 'messageSuggestedPostRefunded':
+        return '[投稿]';
       case 'messageExpiredPhoto':
         return '[照片已过期]';
       case 'messageExpiredVideo':
@@ -798,8 +1146,41 @@ abstract final class TDParse {
       case 'messageUnsupported':
         return '[当前版本暂不支持的消息]';
       default:
+        final fallback = _nestedFormattedText(content);
+        if (fallback.isNotEmpty) return fallback;
+        if (kDebugMode) {
+          debugPrint('Unsupported TDLib message content: ${content.type}');
+        }
         return '[消息]';
     }
+  }
+
+  static String _nestedFormattedText(Object? value) {
+    if (value is Map<String, dynamic>) {
+      if (value.type == 'formattedText') {
+        final text = value.str('text')?.trim() ?? '';
+        if (text.isNotEmpty) return text;
+      }
+      for (final key in const ['text', 'caption', 'title', 'description']) {
+        final obj = value.obj(key);
+        final nested = _nestedFormattedText(obj ?? value[key]);
+        if (nested.isNotEmpty) return nested;
+      }
+      for (final entry in value.entries) {
+        if (entry.key == '@type') continue;
+        final nested = _nestedFormattedText(entry.value);
+        if (nested.isNotEmpty) return nested;
+      }
+    } else if (value is List) {
+      for (final item in value) {
+        final nested = _nestedFormattedText(item);
+        if (nested.isNotEmpty) return nested;
+      }
+    } else if (value is String) {
+      final text = value.trim();
+      if (text.isNotEmpty && !text.startsWith('message')) return text;
+    }
+    return '';
   }
 
   static const _serviceTypes = {

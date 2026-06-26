@@ -527,6 +527,7 @@ class _ChatInfoViewState extends State<ChatInfoView> {
   }
 
   Widget _togglesCard() {
+    final showGroupAssistant = _vm.isMuted || _vm.isArchived;
     return Container(
       decoration: _card,
       child: Column(
@@ -534,6 +535,10 @@ class _ChatInfoViewState extends State<ChatInfoView> {
           _toggleRow('置顶聊天', _vm.isPinned, _vm.setPinned),
           const InsetDivider(leadingInset: 14),
           _toggleRow('消息免打扰', _vm.isMuted, _vm.setMuted),
+          if (showGroupAssistant) ...[
+            const InsetDivider(leadingInset: 14),
+            _toggleRow('收进群助手', _vm.isArchived, _vm.setArchived),
+          ],
         ],
       ),
     );
@@ -631,6 +636,7 @@ class ChatInfoViewModel extends ChangeNotifier {
   bool isPublic = false; // has a public username → searchable
   bool isPinned = false;
   bool isMuted = false;
+  bool isArchived = false;
   List<ChatMember> members = [];
   bool canInvite = false;
   bool canRemove = false;
@@ -669,8 +675,11 @@ class ChatInfoViewModel extends ChangeNotifier {
     }
     for (final pos
         in chat.objects('positions') ?? const <Map<String, dynamic>>[]) {
-      if (pos.obj('list')?.type == 'chatListMain') {
-        isPinned = pos.boolean('is_pinned') ?? false;
+      switch (pos.obj('list')?.type) {
+        case 'chatListMain':
+          isPinned = pos.boolean('is_pinned') ?? false;
+        case 'chatListArchive':
+          isArchived = (pos.int64('order') ?? 0) > 0;
       }
     }
     notifyListeners();
@@ -828,6 +837,22 @@ class ChatInfoViewModel extends ChangeNotifier {
         'mute_for': value ? 2147483647 : 0,
       },
     });
+  }
+
+  void setArchived(bool value) {
+    isArchived = value;
+    notifyListeners();
+    TdClient.shared
+        .query({
+          '@type': 'setChatChatList',
+          'chat_id': chatId,
+          'chat_list': {'@type': value ? 'chatListArchive' : 'chatListMain'},
+        })
+        .catchError((_) {
+          isArchived = !value;
+          notifyListeners();
+          return <String, dynamic>{};
+        });
   }
 
   void clearHistory() {

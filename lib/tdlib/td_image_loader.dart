@@ -61,8 +61,24 @@ class TdFileCenter {
     _startIfNeeded();
 
     final slot = _client.activeSlot;
-    final cached = _cache[_key(slot, fileId)];
+    final k = _key(slot, fileId);
+    final cached = _cache[k];
     if (cached != null) return cached;
+    final pending = _waiters[k];
+    if (pending != null && pending.isNotEmpty) {
+      final completer = Completer<String?>();
+      pending.add(completer);
+      return completer.future.timeout(
+        const Duration(seconds: 180),
+        onTimeout: () {
+          _waiters[k]?.remove(completer);
+          return null;
+        },
+      );
+    }
+
+    final completer = Completer<String?>();
+    _waiters[k] = [completer];
 
     // Kick the download. The immediate response reflects current state, so an
     // already-complete file resolves without waiting for an update.
@@ -79,7 +95,11 @@ class TdFileCenter {
       if (local?.boolean('is_downloading_completed') == true) {
         final path = local?.str('path');
         if (path != null && path.isNotEmpty) {
-          _cache[_key(slot, fileId)] = path;
+          _cache[k] = path;
+          final pending = _waiters.remove(k) ?? [];
+          for (final c in pending) {
+            if (!c.isCompleted) c.complete(path);
+          }
           return path;
         }
       }
@@ -88,11 +108,8 @@ class TdFileCenter {
     }
 
     // Otherwise wait for the completing updateFile.
-    final k = _key(slot, fileId);
     final existing = _cache[k];
     if (existing != null) return existing;
-    final completer = Completer<String?>();
-    _waiters.putIfAbsent(k, () => []).add(completer);
     // Don't wait forever if the download stalls/fails — callers (e.g. the file
     // opener) then surface "下载失败" instead of a stuck spinner.
     return completer.future.timeout(

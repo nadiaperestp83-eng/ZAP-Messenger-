@@ -1,9 +1,9 @@
 //
 //  main_tab_view.dart
 //
-//  Three-tab shell: 消息 / 联系人 / 动态, plus the left-sliding "我" profile drawer
+//  Tab shell: 消息 / 联系人 / optional 动态, plus the left-sliding "我" profile drawer
 //  overlaid above the tab bar. The bottom tab bar is either a custom flat bar
-//  ("classic", default) or the system tab bar — chosen in 通用 settings. Port of
+//  ("classic", default) or the system tab bar — chosen in 外观 settings. Port of
 //  the Swift `MainTabView`.
 //
 
@@ -88,10 +88,16 @@ class _MainTabViewState extends State<MainTabView> {
     (_) => GlobalKey<NavigatorState>(),
   );
 
-  static const _tabs = [
-    ('消息', 'message.fill'),
-    ('联系人', 'person.2.fill'),
-    ('动态', 'circle.dashed'),
+  static const _allTabs = [
+    _MainTabItem(0, '消息', 'message.fill'),
+    _MainTabItem(1, '联系人', 'person.2.fill'),
+    _MainTabItem(2, '动态', 'circle.dashed'),
+  ];
+
+  List<_MainTabItem> _visibleTabs(ThemeController theme) => [
+    _allTabs[0],
+    _allTabs[1],
+    if (theme.showMomentsTab) _allTabs[2],
   ];
 
   Widget _root(int i) => switch (i) {
@@ -111,15 +117,18 @@ class _MainTabViewState extends State<MainTabView> {
 
   void _select(int i) {
     final theme = context.read<ThemeController>();
+    final tabs = _visibleTabs(theme);
+    if (i < 0 || i >= tabs.length) return;
+    final tabIndex = tabs[i].index;
     final shouldJumpUnread =
-        i == 0 && _unread.countFor(theme.unreadBadgeMode) > 0;
-    if (i == _selection) {
+        tabIndex == 0 && _unread.countFor(theme.unreadBadgeMode) > 0;
+    if (tabIndex == _selection) {
       // Tapping the active tab pops to its root.
-      _navKeys[i].currentState?.popUntil((r) => r.isFirst);
+      _navKeys[tabIndex].currentState?.popUntil((r) => r.isFirst);
       if (shouldJumpUnread) _scrollMessagesToFirstUnread();
       return;
     }
-    setState(() => _selection = i);
+    setState(() => _selection = tabIndex);
     if (shouldJumpUnread) _scrollMessagesToFirstUnread();
   }
 
@@ -171,30 +180,43 @@ class _MainTabViewState extends State<MainTabView> {
     );
   }
 
-  Widget _stack() => IndexedStack(
-    index: _selection,
-    children: [for (var i = 0; i < 3; i++) _tabNavigator(i)],
+  int _visibleSelection(List<_MainTabItem> tabs) {
+    final index = tabs.indexWhere((tab) => tab.index == _selection);
+    return index < 0 ? tabs.length - 1 : index;
+  }
+
+  Widget _stack(List<_MainTabItem> tabs) => IndexedStack(
+    index: _visibleSelection(tabs),
+    children: [for (final tab in tabs) _tabNavigator(tab.index)],
   );
 
   // MARK: - Classic (flat) tab bar
 
   Widget _classicTabs() {
     final theme = context.watch<ThemeController>();
+    final tabs = _visibleTabs(theme);
+    if (!tabs.any((tab) => tab.index == _selection)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _selection = tabs.last.index);
+      });
+    }
+    final selection = _visibleSelection(tabs);
+    final activeTabIndex = tabs[selection].index;
     return Column(
       children: [
-        Expanded(child: _stack()),
+        Expanded(child: _stack(tabs)),
         Consumer<dc.TabBarVisibility>(
           builder: (context, vis, _) {
-            final hidden = vis.depth(_selection) > 0;
+            final hidden = vis.depth(activeTabIndex) > 0;
             return AnimatedSize(
               duration: const Duration(milliseconds: 200),
               curve: Curves.easeInOut,
               child: hidden
                   ? const SizedBox(width: double.infinity)
                   : _ClassicTabBar(
-                      selection: _selection,
+                      selection: selection,
                       onSelect: _select,
-                      items: _tabs,
+                      items: tabs,
                       unread: context.watch<UnreadBadgeModel>().countFor(
                         theme.unreadBadgeMode,
                       ),
@@ -217,7 +239,8 @@ class _MainTabViewState extends State<MainTabView> {
           child: Stack(
             children: [
               AnimatedOpacity(
-                duration: const Duration(milliseconds: 250),
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOutCubic,
                 opacity: drawer.isOpen ? 1 : 0,
                 child: GestureDetector(
                   onTap: drawer.close,
@@ -225,8 +248,8 @@ class _MainTabViewState extends State<MainTabView> {
                 ),
               ),
               AnimatedPositioned(
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.easeInOut,
+                duration: const Duration(milliseconds: 320),
+                curve: Curves.easeOutCubic,
                 left: drawer.isOpen ? 0 : -width,
                 top: 0,
                 bottom: 0,
@@ -242,6 +265,14 @@ class _MainTabViewState extends State<MainTabView> {
       },
     );
   }
+}
+
+class _MainTabItem {
+  const _MainTabItem(this.index, this.label, this.icon);
+
+  final int index;
+  final String label;
+  final String icon;
 }
 
 /// Hosts one tab's navigation stack so pushes stay within the tab.
@@ -276,7 +307,7 @@ class _ClassicTabBar extends StatelessWidget {
   });
   final int selection;
   final ValueChanged<int> onSelect;
-  final List<(String, String)> items;
+  final List<_MainTabItem> items;
   final int unread;
 
   @override
@@ -309,7 +340,7 @@ class _ClassicTabBar extends StatelessWidget {
                             alignment: Alignment.center,
                             children: [
                               Icon(
-                                sfIcon(items[i].$2),
+                                sfIcon(items[i].icon),
                                 size: 26,
                                 color: selection == i
                                     ? AppTheme.brand
@@ -326,7 +357,7 @@ class _ClassicTabBar extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          items[i].$1,
+                          items[i].label,
                           style: TextStyle(
                             fontSize: 11,
                             color: selection == i

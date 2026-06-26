@@ -22,6 +22,10 @@ import UIKit
         return
       }
       let pasteboard = UIPasteboard.general
+      if let data = pasteboard.data(forPasteboardType: "com.compuserve.gif") {
+        result(["mimeType": "image/gif", "data": FlutterStandardTypedData(bytes: data)])
+        return
+      }
       if let data = pasteboard.data(forPasteboardType: "public.png") {
         result(["mimeType": "image/png", "data": FlutterStandardTypedData(bytes: data)])
         return

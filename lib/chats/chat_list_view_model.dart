@@ -11,6 +11,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../settings/keyword_blocker.dart';
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
 import '../tdlib/td_models.dart';
@@ -306,6 +307,7 @@ class ChatListViewModel extends ChangeNotifier {
         if (chat == null) return;
         final summary = TDParse.chat(chat);
         if (summary == null) return;
+        summary.lastMessage = _previewText(summary.lastMessage);
         _map[summary.id] = summary;
         _applyPositions(summary.id, chat.objects('positions'));
         _resolvePeerIfNeeded(summary);
@@ -324,7 +326,9 @@ class ChatListViewModel extends ChangeNotifier {
           if (last != null) {
             s.date = last.integer('date') ?? s.date;
             final content = last.obj('content');
-            if (content != null) s.lastMessage = TDParse.messageText(content);
+            if (content != null) {
+              s.lastMessage = _previewText(TDParse.messageText(content));
+            }
           } else {
             s.lastMessage = '';
             s.date = 0;
@@ -479,6 +483,7 @@ class ChatListViewModel extends ChangeNotifier {
         .then((raw) {
           final summary = TDParse.chat(raw);
           if (summary == null) return;
+          summary.lastMessage = _previewText(summary.lastMessage);
           _map[summary.id] = summary;
           _applyPositions(summary.id, raw.objects('positions'));
           _resolvePeerIfNeeded(summary);
@@ -486,6 +491,10 @@ class ChatListViewModel extends ChangeNotifier {
           _resort();
         })
         .catchError((_) {});
+  }
+
+  String _previewText(String text) {
+    return KeywordBlocker.shared.matches(text) ? '[已屏蔽]' : text;
   }
 
   // MARK: - Sorting

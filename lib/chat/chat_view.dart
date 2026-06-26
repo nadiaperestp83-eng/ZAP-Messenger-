@@ -10,6 +10,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import '../components/toast.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -22,8 +23,11 @@ import '../components/ui_components.dart';
 import '../profile/profile_detail_view.dart';
 import '../theme/app_theme.dart';
 import '../theme/theme_controller.dart';
+import '../tdlib/json_helpers.dart';
 import '../tdlib/td_models.dart';
 import '../settings/edit_field_view.dart';
+import '../settings/translation_api.dart';
+import '../settings/translation_controller.dart';
 import 'chat_info_view.dart';
 import 'chat_input_bar.dart';
 import 'chat_picker_view.dart';
@@ -31,6 +35,7 @@ import 'custom_emoji.dart';
 import 'emoji_store.dart';
 import 'chat_view_model.dart';
 import 'full_image_viewer.dart';
+import 'link_handler.dart';
 import 'message_action_menu.dart';
 import 'message_bubble.dart';
 import 'sticker_set_detail_view.dart';
@@ -82,6 +87,13 @@ class _ChatViewState extends State<ChatView> {
   Timer? _bannerTimer; // auto-hides the banner a few seconds after it appears
   int? _scrollTargetId;
   double _keyboardInset = 0;
+  bool _shortTranscriptFillScheduled = false;
+  bool _isFillingShortTranscript = false;
+  bool _autoTranslateScheduled = false;
+  bool _autoTranslateRunning = false;
+  String _autoTranslateConfigKey = '';
+  final Set<int> _autoTranslateInFlight = {};
+  final Set<int> _autoTranslateFailed = {};
 
   /// Gap (seconds) between messages that triggers a fresh time separator.
   static const _separatorGap = 300;
@@ -101,7 +113,7 @@ class _ChatViewState extends State<ChatView> {
   void _onScroll() {
     if (!_scroll.hasClients) return;
     final pos = _scroll.position;
-    if (pos.pixels < 500) _vm.loadOlder();
+    if (pos.pixels < 500) unawaited(_vm.loadOlder());
     // Show the jump-to-bottom button once scrolled up from the newest message.
     final show = pos.maxScrollExtent - pos.pixels > 120;
     if (show != _showJumpDown) setState(() => _showJumpDown = show);
@@ -182,8 +194,14 @@ class _ChatViewState extends State<ChatView> {
     // bottom when caught up. Runs exactly once per chat open.
     if (!_didInitialScroll && _vm.initialLoaded && _vm.messages.isNotEmpty) {
       _didInitialScroll = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _initialScroll());
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _initialScroll();
+        _scheduleShortTranscriptFill();
+      });
+    } else if (_vm.initialLoaded && _vm.messages.isNotEmpty) {
+      _scheduleShortTranscriptFill();
     }
+    _scheduleAutoTranslate();
     // The "N条新消息" banner shows on entry, then auto-hides after a few seconds.
     if (_vm.unreadCount > 0 && _bannerTimer == null && !_bannerDismissed) {
       _bannerTimer = Timer(const Duration(seconds: 6), () {
@@ -235,6 +253,132 @@ class _ChatViewState extends State<ChatView> {
   void _scrollToBottom() {
     if (!_scroll.hasClients) return;
     _scroll.jumpTo(_scroll.position.maxScrollExtent);
+  }
+
+  void _scheduleShortTranscriptFill() {
+    if (_shortTranscriptFillScheduled || _isFillingShortTranscript) return;
+    _shortTranscriptFillScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _shortTranscriptFillScheduled = false;
+      unawaited(_fillShortTranscript());
+    });
+  }
+
+  Future<void> _fillShortTranscript() async {
+    if (!mounted ||
+        !_scroll.hasClients ||
+        !_vm.initialLoaded ||
+        _vm.anchoredHistory ||
+        _scrollTargetId != null ||
+        !_vm.canLoadOlder) {
+      return;
+    }
+    if (_scroll.position.maxScrollExtent > 24) return;
+
+    _isFillingShortTranscript = true;
+    try {
+      var guard = 0;
+      while (mounted &&
+          _scroll.hasClients &&
+          _vm.canLoadOlder &&
+          _scroll.position.maxScrollExtent <= 24 &&
+          guard < 8) {
+        final loaded = await _vm.loadOlder();
+        if (!loaded) break;
+        await WidgetsBinding.instance.endOfFrame;
+        if (!mounted || !_scroll.hasClients) break;
+        _positionAfterShortFill();
+        guard++;
+      }
+    } finally {
+      _isFillingShortTranscript = false;
+    }
+  }
+
+  void _positionAfterShortFill() {
+    final i = _firstUnreadIndex();
+    final boundaryLoaded =
+        _vm.messages.isNotEmpty && _vm.messages.first.id <= _vm.lastReadInboxId;
+    if (_vm.unreadCount > 0 && i >= 0 && boundaryLoaded) {
+      final ctx = _unreadKey.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(ctx, alignment: 0.12, duration: Duration.zero);
+        return;
+      }
+    }
+    _scrollToBottom();
+  }
+
+  void _scheduleAutoTranslate() {
+    if (_autoTranslateScheduled || _autoTranslateRunning) return;
+    final translation = context.read<TranslationController>();
+    if (!translation.enabled ||
+        !translation.autoTranslate ||
+        !_vm.initialLoaded ||
+        _vm.messages.isEmpty) {
+      return;
+    }
+    _autoTranslateScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _autoTranslateScheduled = false;
+      unawaited(_runAutoTranslate());
+    });
+  }
+
+  Future<void> _runAutoTranslate() async {
+    if (!mounted || _autoTranslateRunning) return;
+    final translation = context.read<TranslationController>();
+    if (!translation.enabled || !translation.autoTranslate) return;
+    final configKey = _autoTranslateKey(translation);
+    if (_autoTranslateConfigKey != configKey) {
+      _autoTranslateConfigKey = configKey;
+      _autoTranslateFailed.clear();
+    }
+
+    final candidates = _vm.messages.reversed
+        .where(_shouldAutoTranslate)
+        .take(30)
+        .toList();
+    if (candidates.isEmpty) return;
+
+    _autoTranslateRunning = true;
+    try {
+      for (final message in candidates.reversed) {
+        if (!mounted || !context.read<TranslationController>().autoTranslate) {
+          break;
+        }
+        if (!_shouldAutoTranslate(message)) continue;
+        _autoTranslateInFlight.add(message.id);
+        final ok = await _translateMessage(message, showErrors: false);
+        _autoTranslateInFlight.remove(message.id);
+        if (!ok) _autoTranslateFailed.add(message.id);
+      }
+    } finally {
+      _autoTranslateRunning = false;
+    }
+  }
+
+  bool _shouldAutoTranslate(ChatMessage message) {
+    if (message.isOutgoing ||
+        message.isService ||
+        message.isTranslating ||
+        (message.translationText?.isNotEmpty ?? false) ||
+        _autoTranslateInFlight.contains(message.id) ||
+        _autoTranslateFailed.contains(message.id)) {
+      return false;
+    }
+    return _translationSourceText(message).trim().isNotEmpty;
+  }
+
+  String _autoTranslateKey(TranslationController translation) {
+    final noTranslate = translation.noTranslateLanguageCodes.toList()..sort();
+    return [
+      translation.provider.storageValue,
+      translation.targetLanguageCode,
+      translation.lingvaEndpoint,
+      translation.libreTranslateEndpoint,
+      noTranslate.join(','),
+    ].join('|');
   }
 
   @override
@@ -332,6 +476,56 @@ class _ChatViewState extends State<ChatView> {
     );
   }
 
+  Future<void> _pressMessageButton(
+    ChatMessage message,
+    MessageButton button,
+  ) async {
+    final url = button.url;
+    if (url != null && url.isNotEmpty) {
+      await openLink(context, url);
+      return;
+    }
+    final userId = button.userId;
+    if (userId != null && userId > 0) {
+      await openLink(context, 'tg://user?id=$userId');
+      return;
+    }
+    final copyText = button.copyText;
+    if (copyText != null && copyText.isNotEmpty) {
+      await Clipboard.setData(ClipboardData(text: copyText));
+      if (mounted) showToast(context, '已复制');
+      return;
+    }
+    if (button.isCallback) {
+      try {
+        final answer = await _vm.answerCallbackButton(message.id, button);
+        if (!mounted) return;
+        final answerUrl = answer.str('url');
+        if (answerUrl != null && answerUrl.isNotEmpty) {
+          await openLink(context, answerUrl);
+          return;
+        }
+        final text = answer.str('text');
+        if (text != null && text.isNotEmpty) {
+          showToast(context, text);
+        }
+      } catch (e) {
+        if (!mounted) return;
+        showToast(context, '按钮操作失败');
+      }
+      return;
+    }
+    if (button.isReplyKeyboard && button.type == 'keyboardButtonTypeText') {
+      _vm.sendKeyboardButtonText(button.text);
+      return;
+    }
+    if (button.switchInlineQuery != null) {
+      showToast(context, '暂不支持内联切换按钮');
+      return;
+    }
+    showToast(context, '暂不支持这个按钮');
+  }
+
   Future<void> _perform(MessageAction action, ChatMessage message) async {
     setState(() => _actionTarget = null);
     switch (action) {
@@ -339,6 +533,8 @@ class _ChatViewState extends State<ChatView> {
         Clipboard.setData(ClipboardData(text: message.text));
       case MessageAction.edit:
         _editMessage(message);
+      case MessageAction.translate:
+        _translateMessage(message);
       case MessageAction.reply:
         _vm.setReply(message);
       case MessageAction.forward:
@@ -376,6 +572,79 @@ class _ChatViewState extends State<ChatView> {
         if (!mounted || !confirmed) return;
         _vm.deleteMessage(message.id);
     }
+  }
+
+  Future<bool> _translateMessage(
+    ChatMessage message, {
+    bool showErrors = true,
+  }) async {
+    final translation = context.read<TranslationController>();
+    if (!translation.enabled) return true;
+    final sourceText = _translationSourceText(message);
+    if (sourceText.trim().isEmpty) return true;
+    final sourceLanguage = TranslationController.detectLanguage(sourceText);
+    if (translation.shouldSkipDetectedLanguage(sourceLanguage)) {
+      if (showErrors) showToast(context, '已设为不翻译该语言');
+      return true;
+    }
+    final targetLanguage = _translationTargetLanguage(translation);
+    final normalizedSource = TranslationController.normalizeLanguageCode(
+      sourceLanguage,
+    );
+    final normalizedTarget = TranslationController.normalizeLanguageCode(
+      targetLanguage,
+    );
+    if (normalizedSource != null && normalizedSource == normalizedTarget) {
+      if (showErrors) showToast(context, '已是目标语言');
+      return true;
+    }
+    try {
+      if (translation.provider == TranslationProvider.tdlib) {
+        await _vm.translateMessage(message.id, targetLanguage);
+      } else {
+        await _vm.translateMessageExternally(
+          message.id,
+          targetLanguage,
+          () => ThirdPartyTranslationApi.translate(
+            provider: translation.provider,
+            text: sourceText,
+            sourceLanguageCode: sourceLanguage,
+            targetLanguageCode: targetLanguage,
+            lingvaEndpoint: translation.lingvaEndpoint,
+            libreTranslateEndpoint: translation.libreTranslateEndpoint,
+          ),
+        );
+      }
+      return true;
+    } catch (e) {
+      if (!mounted) return false;
+      if (showErrors) showToast(context, '翻译失败：$e');
+      return false;
+    }
+  }
+
+  String _translationSourceText(ChatMessage message) {
+    final parts = [
+      message.text,
+      message.linkPreview?.title ?? '',
+      message.linkPreview?.description ?? '',
+    ].where((p) => p.trim().isNotEmpty);
+    return parts.join('\n');
+  }
+
+  String _translationTargetLanguage(TranslationController translation) {
+    if (translation.targetLanguageCode != 'auto') {
+      return translation.targetLanguageCode;
+    }
+    final locale = Localizations.localeOf(context);
+    final country = locale.countryCode?.toUpperCase();
+    if (locale.languageCode == 'zh') {
+      return switch (country) {
+        'TW' || 'HK' || 'MO' => 'zh-Hant',
+        _ => 'zh-Hans',
+      };
+    }
+    return locale.languageCode;
   }
 
   Future<void> _editMessage(ChatMessage message) async {
@@ -438,6 +707,10 @@ class _ChatViewState extends State<ChatView> {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final translation = context.watch<TranslationController>();
+    if (translation.enabled && translation.autoTranslate && _vm.initialLoaded) {
+      _scheduleAutoTranslate();
+    }
     _syncKeyboardInset(MediaQuery.of(context).viewInsets.bottom);
     // Not a member, joinable, and nothing to preview → a QQ-style join screen
     // (header + centered card) instead of the transcript + composer.
@@ -927,6 +1200,10 @@ class _ChatViewState extends State<ChatView> {
       color: context.colors.chatBackground,
       child: ListView.builder(
         controller: _scroll,
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        scrollCacheExtent: const ScrollCacheExtent.pixels(900),
         padding: const EdgeInsets.symmetric(vertical: 8),
         itemCount: entries.length,
         itemBuilder: (context, index) {
@@ -973,12 +1250,13 @@ class _ChatViewState extends State<ChatView> {
                   onAvatarTap: _openSenderProfile,
                   onAvatarLongPress: (m) {
                     if (_vm.isGroup && (m.senderName?.isNotEmpty ?? false)) {
-                      _vm.insertMention(m.senderName!);
+                      _vm.insertMention(m);
                     }
                   },
                   onOpenReply: (messageId) => _scrollToMessage(messageId),
                   onOpenImage: _openImage,
                   onPlayVideo: _playVideo,
+                  onButtonTap: _pressMessageButton,
                   isRead: _vm.isRead(message),
                   onToggleReaction: (r) => _vm.toggleReaction(message, r),
                   onRedial: _startCall,
@@ -1066,7 +1344,7 @@ class _ChatViewState extends State<ChatView> {
           ? null
           : () {
               if (_vm.isGroup && (first.senderName?.isNotEmpty ?? false)) {
-                _vm.insertMention(first.senderName!);
+                _vm.insertMention(first);
               }
             },
       child: PhotoAvatar(title: avatarTitle, photo: avatarPhoto, size: 38),
@@ -1189,7 +1467,13 @@ class _ChatViewState extends State<ChatView> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            TDImage(photo: message.image, cornerRadius: 5, fit: BoxFit.cover),
+            TDImage(
+              photo: message.image,
+              cornerRadius: 5,
+              fit: BoxFit.cover,
+              cacheWidth: _cachePx(width),
+              cacheHeight: _cachePx(height),
+            ),
             if (extraCount > 0)
               Container(
                 alignment: Alignment.center,
@@ -1211,6 +1495,9 @@ class _ChatViewState extends State<ChatView> {
       ),
     );
   }
+
+  int _cachePx(double logical) =>
+      (logical * MediaQuery.devicePixelRatioOf(context)).ceil();
 
   static const _quickReactions = ['👍', '❤️', '🔥', '🎉', '😁', '😢', '😡'];
 

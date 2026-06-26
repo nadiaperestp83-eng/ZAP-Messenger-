@@ -14,6 +14,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../app/app_navigator.dart';
 import '../chat/chat_view.dart';
+import '../settings/keyword_blocker.dart';
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
 import '../tdlib/td_models.dart';
@@ -112,6 +113,7 @@ class NotificationController with WidgetsBindingObserver {
 
     final title = chat.str('title') ?? 'Mithka';
     final body = _notificationText(content);
+    if (KeywordBlocker.shared.matches(body)) return;
     final payload = jsonEncode({'chat_id': chatId, 'message_id': messageId});
 
     _notificationSeed = (_notificationSeed + 1) & 0x7fffffff;

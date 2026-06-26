@@ -59,6 +59,7 @@ class ThemeController extends ChangeNotifier {
     _showMessageMetaIndicators =
         _prefs.getBool(_messageMetaIndicatorsKey) ?? false;
     _groupImageMessages = _prefs.getBool(_groupImageMessagesKey) ?? false;
+    _showMomentsTab = _prefs.getBool(_showMomentsTabKey) ?? true;
     _unreadBadgeMode = UnreadBadgeMode.values.firstWhere(
       (m) => m.name == _prefs.getString(_unreadBadgeModeKey),
       orElse: () => UnreadBadgeMode.messages,
@@ -79,6 +80,7 @@ class ThemeController extends ChangeNotifier {
   static const _chatPremiumEmojiStatusKey = 'showChatPremiumEmojiStatus';
   static const _messageMetaIndicatorsKey = 'showMessageMetaIndicators';
   static const _groupImageMessagesKey = 'groupImageMessages';
+  static const _showMomentsTabKey = 'showMomentsTab';
   static const _unreadBadgeModeKey = 'unreadBadgeMode';
 
   static const double minFontScale = 0.8;
@@ -100,6 +102,7 @@ class ThemeController extends ChangeNotifier {
   bool _showChatPremiumEmojiStatus = true;
   bool _showMessageMetaIndicators = false;
   bool _groupImageMessages = false;
+  bool _showMomentsTab = true;
   late UnreadBadgeMode _unreadBadgeMode;
 
   AppearanceMode get mode => _mode;
@@ -114,6 +117,7 @@ class ThemeController extends ChangeNotifier {
   bool get showChatPremiumEmojiStatus => _showChatPremiumEmojiStatus;
   bool get showMessageMetaIndicators => _showMessageMetaIndicators;
   bool get groupImageMessages => _groupImageMessages;
+  bool get showMomentsTab => _showMomentsTab;
   UnreadBadgeMode get unreadBadgeMode => _unreadBadgeMode;
 
   /// App-wide text scale factor, applied at the root via MediaQuery.textScaler.
@@ -201,6 +205,12 @@ class ThemeController extends ChangeNotifier {
   set groupImageMessages(bool value) {
     _groupImageMessages = value;
     _prefs.setBool(_groupImageMessagesKey, value);
+    notifyListeners();
+  }
+
+  set showMomentsTab(bool value) {
+    _showMomentsTab = value;
+    _prefs.setBool(_showMomentsTabKey, value);
     notifyListeners();
   }
 

@@ -75,6 +75,13 @@ class AppearanceView extends StatelessWidget {
                     theme.groupImageMessages,
                     (v) => theme.groupImageMessages = v,
                   ),
+                  _toggleRow(
+                    context,
+                    Icons.circle_outlined,
+                    '显示底部动态',
+                    theme.showMomentsTab,
+                    (v) => theme.showMomentsTab = v,
+                  ),
                 ]),
                 const SizedBox(height: AppSpacing.xl),
                 _label(context, '聊天界面'),

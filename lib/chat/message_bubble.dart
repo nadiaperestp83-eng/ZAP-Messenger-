@@ -17,6 +17,7 @@ import 'package:provider/provider.dart';
 import '../components/photo_avatar.dart';
 import '../components/sf_symbols.dart';
 import '../components/ui_components.dart';
+import '../profile/profile_detail_view.dart';
 import '../theme/app_theme.dart';
 import '../theme/theme_controller.dart';
 import '../tdlib/json_helpers.dart';
@@ -58,6 +59,7 @@ class MessageBubble extends StatefulWidget {
     this.onOpenReply,
     this.onOpenImage,
     this.onPlayVideo,
+    this.onButtonTap,
     this.onToggleReaction,
     this.onRedial,
     this.isRead = false,
@@ -78,6 +80,7 @@ class MessageBubble extends StatefulWidget {
   final ValueChanged<int>? onOpenReply;
   final ValueChanged<ChatMessage>? onOpenImage;
   final ValueChanged<ChatMessage>? onPlayVideo;
+  final void Function(ChatMessage message, MessageButton button)? onButtonTap;
   final ValueChanged<MessageReaction>? onToggleReaction;
   final ValueChanged<bool>?
   onRedial; // tap a call log to redial (bool = isVideo)
@@ -87,13 +90,20 @@ class MessageBubble extends StatefulWidget {
   State<MessageBubble> createState() => _MessageBubbleState();
 }
 
-class _MessageBubbleState extends State<MessageBubble> {
+class _MessageBubbleState extends State<MessageBubble>
+    with SingleTickerProviderStateMixin {
+  static const double _replyTrigger = 48;
+  static const double _replyRestingLimit = 72;
+  static const double _replyHardLimit = 104;
+
   final VoicePlayer _voice = VoicePlayer();
   final GlobalKey _bubbleKey = GlobalKey();
   final List<TapGestureRecognizer> _linkRecognizers = [];
+  late final AnimationController _swipeController;
   bool _stickerReady = false;
   bool _videoStickerReady = false;
   double _swipeX = 0;
+  final Set<String> _expandedQuotes = {};
 
   void _handleLongPress() {
     final box = _bubbleKey.currentContext?.findRenderObject() as RenderBox?;
@@ -107,7 +117,17 @@ class _MessageBubbleState extends State<MessageBubble> {
   ChatMessage get message => widget.message;
 
   @override
+  void initState() {
+    super.initState();
+    _swipeController = AnimationController.unbounded(vsync: this)
+      ..addListener(() {
+        if (mounted) setState(() => _swipeX = _swipeController.value);
+      });
+  }
+
+  @override
   void dispose() {
+    _swipeController.dispose();
     _voice.dispose();
     for (final r in _linkRecognizers) {
       r.dispose();
@@ -140,13 +160,31 @@ class _MessageBubbleState extends State<MessageBubble> {
     );
   }
 
+  double _rubberBandSwipe(double value) {
+    if (value >= -_replyRestingLimit) {
+      return value.clamp(-_replyHardLimit, 0).toDouble();
+    }
+    final extra = -value - _replyRestingLimit;
+    final damped = _replyRestingLimit + extra * 0.34;
+    return -damped.clamp(0, _replyHardLimit).toDouble();
+  }
+
   void _onDragUpdate(DragUpdateDetails d) {
-    setState(() => _swipeX = math.max(math.min(_swipeX + d.delta.dx, 0), -72));
+    _swipeController.stop();
+    final next = _rubberBandSwipe(_swipeX + d.delta.dx);
+    _swipeController.value = next;
   }
 
   void _onDragEnd(DragEndDetails d) {
-    if (_swipeX < -52) widget.onReply?.call(message);
-    setState(() => _swipeX = 0);
+    if (_swipeX < -_replyTrigger ||
+        d.primaryVelocity != null && d.primaryVelocity! < -650) {
+      widget.onReply?.call(message);
+    }
+    _swipeController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 190),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   Widget _row(bool outgoing) {
@@ -165,6 +203,7 @@ class _MessageBubbleState extends State<MessageBubble> {
     final body = GestureDetector(
       key: _bubbleKey,
       onLongPress: _handleLongPress,
+      onHorizontalDragStart: (_) => _swipeController.stop(),
       onHorizontalDragUpdate: _onDragUpdate,
       onHorizontalDragEnd: _onDragEnd,
       child: _contentBody(outgoing),
@@ -371,17 +410,26 @@ class _MessageBubbleState extends State<MessageBubble> {
   // MARK: - Content router
 
   Widget _contentBody(bool outgoing) {
-    if (message.isCall) return _callBubble(outgoing);
+    late final Widget body;
+    if (message.isCall) {
+      body = _callBubble(outgoing);
+      return _withButtonRows(body, outgoing);
+    }
     if (message.animatedSticker != null) {
       final s = _stickerSize();
-      return SizedBox(
+      body = SizedBox(
         width: s.width,
         height: s.height,
         child: Stack(
           fit: StackFit.expand,
           children: [
             if (message.image != null && !_stickerReady)
-              TDImage(photo: message.image, cornerRadius: 8),
+              TDImage(
+                photo: message.image,
+                cornerRadius: 8,
+                cacheWidth: _cachePx(s.width),
+                cacheHeight: _cachePx(s.height),
+              ),
             AnimatedStickerView(
               file: message.animatedSticker!,
               onReady: () => setState(() => _stickerReady = true),
@@ -389,10 +437,11 @@ class _MessageBubbleState extends State<MessageBubble> {
           ],
         ),
       );
+      return _withButtonRows(body, outgoing);
     }
     if (message.videoSticker != null) {
       final s = _stickerSize();
-      return SizedBox(
+      body = SizedBox(
         width: s.width,
         height: s.height,
         child: Stack(
@@ -400,7 +449,12 @@ class _MessageBubbleState extends State<MessageBubble> {
           children: [
             // Static thumbnail until the webm decodes its first frame.
             if (message.image != null && !_videoStickerReady)
-              TDImage(photo: message.image, cornerRadius: 8),
+              TDImage(
+                photo: message.image,
+                cornerRadius: 8,
+                cacheWidth: _cachePx(s.width),
+                cacheHeight: _cachePx(s.height),
+              ),
             VideoStickerView(
               file: message.videoSticker!,
               onReady: () => setState(() => _videoStickerReady = true),
@@ -408,13 +462,96 @@ class _MessageBubbleState extends State<MessageBubble> {
           ],
         ),
       );
+      return _withButtonRows(body, outgoing);
     }
-    if (message.video != null) return _videoContent(outgoing);
-    if (message.image != null) return _imageContent(message.image!, outgoing);
-    if (message.location != null) return _locationBubble(message.location!);
-    if (message.voice != null) return _voiceBubble(message.voice!, outgoing);
-    if (message.document != null) return _fileCard(message.document!);
-    return _textBubble(message.text, outgoing);
+    if (message.video != null) {
+      body = _videoContent(outgoing);
+    } else if (message.image != null) {
+      body = _imageContent(message.image!, outgoing);
+    } else if (message.location != null) {
+      body = _locationBubble(message.location!);
+    } else if (message.voice != null) {
+      body = _voiceBubble(message.voice!, outgoing);
+    } else if (message.document != null) {
+      body = _fileCard(message.document!);
+    } else {
+      body = _textBubble(message.text, outgoing);
+    }
+    return _withButtonRows(body, outgoing);
+  }
+
+  Widget _withButtonRows(Widget body, bool outgoing) {
+    if (message.buttonRows.isEmpty) return body;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: outgoing
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
+      children: [body, const SizedBox(height: 6), _buttonRows(outgoing)],
+    );
+  }
+
+  Widget _buttonRows(bool outgoing) {
+    final maxWidth = math.min(MediaQuery.sizeOf(context).width * 0.68, 286.0);
+    return SizedBox(
+      width: maxWidth,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < message.buttonRows.length; i++) ...[
+            if (i > 0) const SizedBox(height: 5),
+            Row(
+              children: [
+                for (var j = 0; j < message.buttonRows[i].length; j++) ...[
+                  if (j > 0) const SizedBox(width: 5),
+                  Expanded(
+                    child: _buttonCell(message.buttonRows[i][j], outgoing),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buttonCell(MessageButton button, bool outgoing) {
+    final c = context.colors;
+    final fg = outgoing ? AppTheme.brand : c.linkBlue;
+    return Material(
+      color: outgoing ? Colors.white.withValues(alpha: 0.92) : c.bubbleIncoming,
+      borderRadius: BorderRadius.circular(6),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: () => widget.onButtonTap?.call(message, button),
+        child: Container(
+          height: 36,
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: outgoing
+                  ? Colors.white.withValues(alpha: 0.65)
+                  : c.divider,
+              width: 0.5,
+            ),
+          ),
+          child: Text(
+            button.text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: fg,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   // MARK: - Text bubble
@@ -426,6 +563,10 @@ class _MessageBubbleState extends State<MessageBubble> {
         ? AppTheme.bubbleOutgoingText
         : c.bubbleIncomingText;
     final linkColor = outgoing ? Colors.white : c.linkBlue;
+    for (final r in _linkRecognizers) {
+      r.dispose();
+    }
+    _linkRecognizers.clear();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
@@ -445,16 +586,221 @@ class _MessageBubbleState extends State<MessageBubble> {
             _replyQuote(outgoing),
             const SizedBox(height: 5),
           ],
-          RichText(
-            text: TextSpan(
-              style: TextStyle(fontSize: 16, color: baseColor),
+          if (message.linkPreview?.showAboveText ?? false) ...[
+            _linkPreviewCard(message.linkPreview!, outgoing),
+            if (text.isNotEmpty) const SizedBox(height: 6),
+          ],
+          ..._richTextWidgets(
+            text,
+            baseColor,
+            linkColor,
+            outgoing,
+            showMeta && (widget.message.isEdited || outgoing),
+          ),
+          if (message.linkPreview != null &&
+              !message.linkPreview!.showAboveText) ...[
+            if (text.isNotEmpty) const SizedBox(height: 7),
+            _linkPreviewCard(message.linkPreview!, outgoing),
+          ],
+          if (message.isTranslating ||
+              (message.translationText?.isNotEmpty ?? false)) ...[
+            const SizedBox(height: 7),
+            _translationBlock(outgoing),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _translationBlock(bool outgoing) {
+    final c = context.colors;
+    final base = outgoing ? Colors.white : c.textPrimary;
+    final secondary = outgoing
+        ? Colors.white.withValues(alpha: 0.70)
+        : c.textSecondary;
+    final link = outgoing ? Colors.white : c.linkBlue;
+    return Container(
+      width: math.min(MediaQuery.sizeOf(context).width * 0.70, 310.0),
+      decoration: BoxDecoration(
+        color: outgoing
+            ? Colors.white.withValues(alpha: 0.10)
+            : c.searchFill.withValues(alpha: 0.80),
+        borderRadius: BorderRadius.circular(7),
+        border: Border(left: BorderSide(color: secondary, width: 2.5)),
+      ),
+      padding: const EdgeInsets.fromLTRB(10, 7, 10, 8),
+      child: message.isTranslating
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                ..._emojiSpans(text, baseColor, linkColor),
-                if (showMeta && (widget.message.isEdited || outgoing))
-                  _metaSpan(outgoing),
+                SizedBox(
+                  width: 13,
+                  height: 13,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation(secondary),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text('正在翻译…', style: TextStyle(fontSize: 13, color: secondary)),
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '翻译',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: secondary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                ..._richTextWidgets(
+                  message.translationText ?? '',
+                  base,
+                  link,
+                  outgoing,
+                  false,
+                  message.translationEntities,
+                  14,
+                ),
               ],
             ),
+    );
+  }
+
+  Widget _linkPreviewCard(MessageLinkPreview preview, bool outgoing) {
+    final c = context.colors;
+    final base = outgoing ? Colors.white : c.textPrimary;
+    final secondary = outgoing
+        ? Colors.white.withValues(alpha: 0.75)
+        : c.textSecondary;
+    final link = outgoing ? Colors.white : c.linkBlue;
+    final maxWidth = math.min(MediaQuery.sizeOf(context).width * 0.70, 310.0);
+    final media = _linkPreviewMedia(preview, maxWidth);
+    final textChildren = <Widget>[
+      if (preview.siteName.isNotEmpty)
+        Text(
+          preview.siteName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: link,
           ),
+        ),
+      if (preview.title.isNotEmpty)
+        Text(
+          preview.title,
+          style: TextStyle(
+            fontSize: 15,
+            height: 1.2,
+            fontWeight: FontWeight.w700,
+            color: base,
+          ),
+        ),
+      if (preview.description.isNotEmpty)
+        ..._richTextWidgets(
+          preview.description,
+          base,
+          link,
+          outgoing,
+          false,
+          preview.descriptionEntities,
+          14,
+        ),
+      if (preview.displayUrl.isNotEmpty)
+        Text(
+          preview.displayUrl,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 12, color: secondary),
+        ),
+    ];
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: preview.url.isEmpty ? null : () => openLink(context, preview.url),
+      child: Container(
+        width: maxWidth,
+        decoration: BoxDecoration(
+          color: outgoing
+              ? Colors.white.withValues(alpha: 0.10)
+              : c.searchFill.withValues(alpha: 0.85),
+          borderRadius: BorderRadius.circular(7),
+          border: Border(
+            left: BorderSide(color: outgoing ? Colors.white : link, width: 3),
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (media != null && preview.showMediaAboveDescription) media,
+            if (textChildren.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (var i = 0; i < textChildren.length; i++) ...[
+                      if (i > 0) const SizedBox(height: 4),
+                      textChildren[i],
+                    ],
+                  ],
+                ),
+              ),
+            if (media != null && !preview.showMediaAboveDescription) media,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget? _linkPreviewMedia(MessageLinkPreview preview, double maxWidth) {
+    final media = preview.image;
+    if (media == null) return null;
+    final large =
+        preview.showLargeMedia || preview.type == 'linkPreviewTypePhoto';
+    final width = large ? maxWidth : math.min(maxWidth, 210.0);
+    final size = _fitSize(
+      width: preview.imageWidth,
+      height: preview.imageHeight,
+      maxWidth: width,
+      maxHeight: large ? 180 : 120,
+      fallback: Size(width, large ? 140 : 96),
+    );
+    return SizedBox(
+      width: size.width,
+      height: size.height,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          TDImage(
+            photo: media,
+            cornerRadius: 0,
+            fit: BoxFit.cover,
+            cacheWidth: _cachePx(size.width),
+            cacheHeight: _cachePx(size.height),
+          ),
+          if (preview.video != null)
+            Center(
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(sfIcon('play.fill'), color: Colors.white, size: 20),
+              ),
+            ),
         ],
       ),
     );
@@ -635,53 +981,377 @@ class _MessageBubbleState extends State<MessageBubble> {
     );
   }
 
-  /// Interleaves inline custom-emoji widgets (at their UTF-16 entity ranges)
-  /// with link-highlighted plain text segments.
-  List<InlineSpan> _emojiSpans(String text, Color base, Color link) {
-    // Recycle tap recognizers from the previous build before making new ones.
-    for (final r in _linkRecognizers) {
-      r.dispose();
-    }
-    _linkRecognizers.clear();
-    final emojis = message.customEmoji;
-    if (emojis.isEmpty) return _linkSpans(text, base, link);
-    final sorted = [...emojis]..sort((a, b) => a.offset.compareTo(b.offset));
-    final spans = <InlineSpan>[];
-    var cursor = 0;
-    for (final e in sorted) {
-      final start = e.offset.clamp(0, text.length);
-      final end = (e.offset + e.length).clamp(0, text.length);
-      if (start < cursor || end <= start) continue;
-      if (start > cursor) {
-        spans.addAll(_linkSpans(text.substring(cursor, start), base, link));
-      }
-      spans.add(
-        WidgetSpan(
-          alignment: PlaceholderAlignment.middle,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 0.5),
-            child: CustomEmojiView(id: e.id, size: 20, color: base),
-          ),
+  List<Widget> _richTextWidgets(
+    String text,
+    Color base,
+    Color link,
+    bool outgoing,
+    bool appendMeta, [
+    List<MessageTextEntity>? entities,
+    double fontSize = 16,
+  ]) {
+    final sourceEntities = entities ?? message.textEntities;
+    final quotes = sourceEntities.where((e) => e.isBlockQuote).toList()
+      ..sort((a, b) => a.offset.compareTo(b.offset));
+    if (quotes.isEmpty) {
+      return [
+        _richText(
+          text,
+          base,
+          link,
+          0,
+          text.length,
+          outgoing,
+          appendMeta,
+          entities: sourceEntities,
+          fontSize: fontSize,
         ),
+      ];
+    }
+
+    final widgets = <Widget>[];
+    var cursor = 0;
+    var metaAdded = false;
+    for (final quote in quotes) {
+      final start = quote.offset.clamp(0, text.length).toInt();
+      final end = quote.end.clamp(start, text.length).toInt();
+      if (end <= cursor) continue;
+      if (start > cursor) {
+        widgets.add(
+          _richText(
+            text,
+            base,
+            link,
+            cursor,
+            start,
+            outgoing,
+            false,
+            entities: sourceEntities,
+            fontSize: fontSize,
+          ),
+        );
+        widgets.add(const SizedBox(height: 5));
+      }
+      widgets.add(
+        _quoteBlock(quote, text, start, end, base, link, sourceEntities),
       );
       cursor = end;
     }
     if (cursor < text.length) {
-      spans.addAll(_linkSpans(text.substring(cursor), base, link));
+      widgets.add(const SizedBox(height: 5));
+      widgets.add(
+        _richText(
+          text,
+          base,
+          link,
+          cursor,
+          text.length,
+          outgoing,
+          appendMeta,
+          entities: sourceEntities,
+          fontSize: fontSize,
+        ),
+      );
+      metaAdded = appendMeta;
+    }
+    if (appendMeta && !metaAdded) {
+      widgets.add(
+        Align(
+          alignment: Alignment.centerRight,
+          child: RichText(text: TextSpan(children: [_metaSpan(outgoing)])),
+        ),
+      );
+    }
+    return widgets;
+  }
+
+  Widget _richText(
+    String text,
+    Color base,
+    Color link,
+    int start,
+    int end,
+    bool outgoing,
+    bool appendMeta, {
+    int? maxLines,
+    List<MessageTextEntity>? entities,
+    double fontSize = 16,
+  }) {
+    final children = _entitySpans(
+      text,
+      start,
+      end,
+      base,
+      link,
+      entities ?? message.textEntities,
+    );
+    if (appendMeta) children.add(_metaSpan(outgoing));
+    return RichText(
+      maxLines: maxLines,
+      overflow: maxLines == null ? TextOverflow.clip : TextOverflow.fade,
+      text: TextSpan(
+        style: TextStyle(fontSize: fontSize, color: base),
+        children: children,
+      ),
+    );
+  }
+
+  Widget _quoteBlock(
+    MessageTextEntity quote,
+    String text,
+    int start,
+    int end,
+    Color base,
+    Color link,
+    List<MessageTextEntity> entities,
+  ) {
+    final c = context.colors;
+    final key = '${quote.offset}:${quote.length}';
+    final expanded =
+        !quote.isExpandableBlockQuote || _expandedQuotes.contains(key);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: quote.isExpandableBlockQuote
+          ? () {
+              setState(() {
+                if (expanded) {
+                  _expandedQuotes.remove(key);
+                } else {
+                  _expandedQuotes.add(key);
+                }
+              });
+            }
+          : null,
+      child: Container(
+        decoration: BoxDecoration(
+          color: c.searchFill.withValues(alpha: 0.65),
+          borderRadius: BorderRadius.circular(6),
+          border: Border(left: BorderSide(color: AppTheme.brand, width: 3)),
+        ),
+        padding: const EdgeInsets.fromLTRB(9, 7, 8, 7),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _richText(
+              text,
+              base,
+              link,
+              start,
+              end,
+              false,
+              false,
+              maxLines: expanded ? null : 3,
+              entities: entities,
+            ),
+            if (quote.isExpandableBlockQuote) ...[
+              const SizedBox(height: 4),
+              Text(
+                expanded ? '收起' : '展开引用',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppTheme.brand,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<InlineSpan> _entitySpans(
+    String text,
+    int start,
+    int end,
+    Color base,
+    Color link,
+    List<MessageTextEntity> sourceEntities,
+  ) {
+    final entities =
+        sourceEntities
+            .where((e) => !e.isBlockQuote && e.offset < end && e.end > start)
+            .toList()
+          ..sort((a, b) => a.offset.compareTo(b.offset));
+    final spans = <InlineSpan>[];
+    var cursor = start;
+    while (cursor < end) {
+      MessageTextEntity? emoji;
+      for (final e in entities) {
+        if (e.isCustomEmoji &&
+            e.customEmojiId != null &&
+            e.offset == cursor &&
+            e.end <= end) {
+          emoji = e;
+          break;
+        }
+      }
+      if (emoji != null) {
+        spans.add(
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 0.5),
+              child: CustomEmojiView(
+                id: emoji.customEmojiId!,
+                size: 20,
+                color: base,
+              ),
+            ),
+          ),
+        );
+        cursor = emoji.end.clamp(cursor + 1, end).toInt();
+        continue;
+      }
+
+      var next = end;
+      for (final e in entities) {
+        final eStart = e.offset.clamp(start, end).toInt();
+        final eEnd = e.end.clamp(start, end).toInt();
+        if (eStart > cursor) next = math.min(next, eStart);
+        if (eStart <= cursor && eEnd > cursor) next = math.min(next, eEnd);
+      }
+      if (next <= cursor) next = cursor + 1;
+      final active = entities
+          .where((e) => e.offset <= cursor && e.end >= next)
+          .toList();
+      spans.addAll(
+        _textSegmentSpans(text.substring(cursor, next), active, base, link),
+      );
+      cursor = next;
     }
     return spans;
   }
 
-  List<InlineSpan> _linkSpans(String text, Color base, Color link) {
+  List<InlineSpan> _textSegmentSpans(
+    String segment,
+    List<MessageTextEntity> active,
+    Color base,
+    Color link,
+  ) {
+    final style = _entityStyle(active, base, link);
+    final userId = _entityMentionUserId(active);
+    if (userId != null) {
+      final recognizer = TapGestureRecognizer()
+        ..onTap = () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => ProfileDetailView(userId: userId, name: segment),
+            ),
+          );
+        };
+      _linkRecognizers.add(recognizer);
+      return [TextSpan(text: segment, style: style, recognizer: recognizer)];
+    }
+    final target = _entityTapTarget(segment, active);
+    if (target != null) {
+      final recognizer = TapGestureRecognizer()
+        ..onTap = () => openLink(context, target);
+      _linkRecognizers.add(recognizer);
+      return [TextSpan(text: segment, style: style, recognizer: recognizer)];
+    }
+    final hasCode = active.any(
+      (e) =>
+          e.type == 'textEntityTypeCode' ||
+          e.type == 'textEntityTypePre' ||
+          e.type == 'textEntityTypePreCode',
+    );
+    if (hasCode) return [TextSpan(text: segment, style: style)];
+    return _linkSpansStyled(segment, style, link);
+  }
+
+  TextStyle _entityStyle(
+    List<MessageTextEntity> active,
+    Color base,
+    Color link,
+  ) {
+    var color = base;
+    var weight = FontWeight.w400;
+    FontStyle? fontStyle;
+    String? fontFamily;
+    Color? backgroundColor;
+    final decorations = <TextDecoration>[];
+    for (final e in active) {
+      switch (e.type) {
+        case 'textEntityTypeBold':
+          weight = FontWeight.w700;
+        case 'textEntityTypeItalic':
+          fontStyle = FontStyle.italic;
+        case 'textEntityTypeUnderline':
+          decorations.add(TextDecoration.underline);
+        case 'textEntityTypeStrikethrough':
+          decorations.add(TextDecoration.lineThrough);
+        case 'textEntityTypeCode':
+        case 'textEntityTypePre':
+        case 'textEntityTypePreCode':
+          fontFamily = 'Menlo';
+          backgroundColor = context.colors.searchFill;
+        case 'textEntityTypeSpoiler':
+          backgroundColor = base.withValues(alpha: 0.16);
+        case 'textEntityTypeTextUrl':
+        case 'textEntityTypeUrl':
+        case 'textEntityTypeMention':
+        case 'textEntityTypeMentionName':
+          color = link;
+          decorations.add(TextDecoration.underline);
+      }
+    }
+    return TextStyle(
+      color: color,
+      fontWeight: weight,
+      fontStyle: fontStyle,
+      fontFamily: fontFamily,
+      backgroundColor: backgroundColor,
+      decoration: decorations.isEmpty
+          ? null
+          : TextDecoration.combine(decorations),
+      decorationColor: color,
+    );
+  }
+
+  String? _entityTapTarget(String segment, List<MessageTextEntity> active) {
+    for (final e in active.reversed) {
+      switch (e.type) {
+        case 'textEntityTypeTextUrl':
+          return e.url;
+        case 'textEntityTypeUrl':
+          return segment;
+        case 'textEntityTypeMention':
+          return segment.startsWith('@')
+              ? 'https://t.me/${segment.substring(1)}'
+              : null;
+        case 'textEntityTypeMentionName':
+          return null;
+      }
+    }
+    return null;
+  }
+
+  int? _entityMentionUserId(List<MessageTextEntity> active) {
+    for (final e in active.reversed) {
+      if (e.type == 'textEntityTypeMentionName' && e.userId != null) {
+        return e.userId;
+      }
+    }
+    return null;
+  }
+
+  List<InlineSpan> _linkSpansStyled(
+    String text,
+    TextStyle baseStyle,
+    Color link,
+  ) {
     final spans = <InlineSpan>[];
     var last = 0;
     for (final m in _linkRegExp.allMatches(text)) {
       if (m.start > last) {
-        spans.add(TextSpan(text: text.substring(last, m.start)));
+        spans.add(
+          TextSpan(text: text.substring(last, m.start), style: baseStyle),
+        );
       }
       final matched = text.substring(m.start, m.end);
       final isMention = m.group(2) != null;
-      // @username resolves via t.me — openLink routes it through TDLib.
       final target = isMention
           ? 'https://t.me/${matched.substring(1)}'
           : matched;
@@ -691,21 +1361,28 @@ class _MessageBubbleState extends State<MessageBubble> {
       spans.add(
         TextSpan(
           text: matched,
-          style: TextStyle(
+          style: baseStyle.copyWith(
             color: link,
-            // Mentions are colored but not underlined (URLs keep the underline).
-            decoration: isMention ? null : TextDecoration.underline,
+            decoration: isMention
+                ? baseStyle.decoration
+                : TextDecoration.underline,
+            decorationColor: link,
           ),
           recognizer: recognizer,
         ),
       );
       last = m.end;
     }
-    if (last < text.length) spans.add(TextSpan(text: text.substring(last)));
+    if (last < text.length) {
+      spans.add(TextSpan(text: text.substring(last), style: baseStyle));
+    }
     return spans;
   }
 
   // MARK: - Image
+
+  int _cachePx(double logical) =>
+      (logical * MediaQuery.devicePixelRatioOf(context)).ceil();
 
   Widget _imageContent(TdFileRef image, bool outgoing) {
     final size = _imageDisplaySize();
@@ -722,7 +1399,13 @@ class _MessageBubbleState extends State<MessageBubble> {
             height: size.height,
             // Fit (contain) so the whole image shows at its aspect ratio — never
             // cropped. The box is already aspect-correct when dimensions are known.
-            child: TDImage(photo: image, cornerRadius: 10, fit: BoxFit.contain),
+            child: TDImage(
+              photo: image,
+              cornerRadius: 10,
+              fit: BoxFit.contain,
+              cacheWidth: _cachePx(size.width),
+              cacheHeight: _cachePx(size.height),
+            ),
           ),
         ),
         if (caption != null) ...[
@@ -759,6 +1442,8 @@ class _MessageBubbleState extends State<MessageBubble> {
                           photo: message.image,
                           cornerRadius: 10,
                           fit: BoxFit.cover,
+                          cacheWidth: _cachePx(size.width),
+                          cacheHeight: _cachePx(size.height),
                         )
                       : Container(color: Colors.black26),
                 ),
@@ -821,16 +1506,31 @@ class _MessageBubbleState extends State<MessageBubble> {
   }
 
   Size _imageDisplaySize() {
-    const maxW = 240.0, maxH = 280.0;
-    final w = message.imageWidth, h = message.imageHeight;
+    return _fitSize(
+      width: message.imageWidth,
+      height: message.imageHeight,
+      maxWidth: 240,
+      maxHeight: 280,
+      fallback: const Size(200, 200),
+    );
+  }
+
+  Size _fitSize({
+    required int? width,
+    required int? height,
+    required double maxWidth,
+    required double maxHeight,
+    required Size fallback,
+  }) {
+    final w = width, h = height;
     if (w == null || h == null || w <= 0 || h <= 0) {
-      return const Size(200, 200);
+      return fallback;
     }
     final aspect = w / h;
-    var dw = maxW;
+    var dw = maxWidth;
     var dh = dw / aspect;
-    if (dh > maxH) {
-      dh = maxH;
+    if (dh > maxHeight) {
+      dh = maxHeight;
       dw = dh * aspect;
     }
     return Size(dw, dh);

@@ -31,16 +31,14 @@ class AvatarClip extends StatelessWidget {
   Widget build(BuildContext context) {
     if (square) {
       return ClipRRect(
-        // antiAliasWithSaveLayer composites the clip offscreen so the rounded
-        // edge is smooth instead of stair-stepped on some GPUs/Impeller.
-        clipBehavior: Clip.antiAliasWithSaveLayer,
+        clipBehavior: Clip.antiAlias,
         borderRadius: BorderRadius.circular(
           size * AppTheme.groupAvatarCornerRatio,
         ),
         child: child,
       );
     }
-    return ClipOval(clipBehavior: Clip.antiAliasWithSaveLayer, child: child);
+    return ClipOval(clipBehavior: Clip.antiAlias, child: child);
   }
 }
 
@@ -144,10 +142,14 @@ class _PhotoAvatarState extends State<PhotoAvatar> {
 
   Widget _content() {
     final ref = widget.photo;
+    final cacheSize = _cacheSizePx(context, widget.size);
     if (_file != null) {
       return Image.file(
         _file!,
         fit: BoxFit.cover,
+        cacheWidth: cacheSize,
+        cacheHeight: cacheSize,
+        gaplessPlayback: true,
         // medium = trilinear/mipmapped sampling, so a large source photo shrunk
         // to a small avatar isn't aliased/shimmery (low is the default).
         filterQuality: FilterQuality.medium,
@@ -158,6 +160,9 @@ class _PhotoAvatarState extends State<PhotoAvatar> {
       return Image.memory(
         ref!.miniThumb!,
         fit: BoxFit.cover,
+        cacheWidth: cacheSize,
+        cacheHeight: cacheSize,
+        gaplessPlayback: true,
         filterQuality: FilterQuality.medium,
         errorBuilder: (_, _, _) => _placeholder(),
       );
@@ -181,6 +186,9 @@ class _PhotoAvatarState extends State<PhotoAvatar> {
     );
   }
 }
+
+int _cacheSizePx(BuildContext context, double logicalSize) =>
+    (logicalSize * MediaQuery.devicePixelRatioOf(context)).ceil();
 
 /// Circular monogram avatar (fallback / simple cases like "我").
 class MonogramAvatar extends StatelessWidget {
@@ -215,10 +223,14 @@ class TDImage extends StatefulWidget {
     this.photo,
     this.cornerRadius = 8,
     this.fit = BoxFit.cover,
+    this.cacheWidth,
+    this.cacheHeight,
   });
   final TdFileRef? photo;
   final double cornerRadius;
   final BoxFit fit;
+  final int? cacheWidth;
+  final int? cacheHeight;
 
   @override
   State<TDImage> createState() => _TDImageState();
@@ -262,9 +274,21 @@ class _TDImageState extends State<TDImage> {
   Widget build(BuildContext context) {
     Widget child;
     if (_file != null) {
-      child = Image.file(_file!, fit: widget.fit);
+      child = Image.file(
+        _file!,
+        fit: widget.fit,
+        cacheWidth: widget.cacheWidth,
+        cacheHeight: widget.cacheHeight,
+        gaplessPlayback: true,
+      );
     } else if (widget.photo?.miniThumb != null) {
-      child = Image.memory(widget.photo!.miniThumb!, fit: widget.fit);
+      child = Image.memory(
+        widget.photo!.miniThumb!,
+        fit: widget.fit,
+        cacheWidth: widget.cacheWidth,
+        cacheHeight: widget.cacheHeight,
+        gaplessPlayback: true,
+      );
     } else {
       child = Container(color: context.colors.groupedBackground);
     }

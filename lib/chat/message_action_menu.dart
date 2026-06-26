@@ -8,14 +8,17 @@
 //
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../components/sf_symbols.dart';
+import '../settings/translation_controller.dart';
 import '../tdlib/td_models.dart';
 import 'emoji_store.dart';
 
 enum MessageAction {
   copy('doc', '复制'),
   edit('pencil', '编辑'),
+  translate('character.book.closed', '翻译'),
   reply('arrowshape.turn.up.left', '引用'),
   forward('arrowshape.turn.up.left', '转发'),
   save('star.fill', '收藏'),
@@ -50,7 +53,7 @@ class MessageActionMenu extends StatelessWidget {
   bool get _isEditableTextMessage =>
       message.contentType == 'messageText' && message.text.isNotEmpty;
 
-  List<MessageAction> get _actions {
+  List<MessageAction> _actions(bool translationEnabled) {
     // Call logs / special messages: only 删除 (no copy/reply/forward/react).
     if (message.isCall) return [MessageAction.delete];
     final result = <MessageAction>[];
@@ -59,6 +62,7 @@ class MessageActionMenu extends StatelessWidget {
       if (message.isOutgoing && _isEditableTextMessage) {
         result.add(MessageAction.edit);
       }
+      if (translationEnabled) result.add(MessageAction.translate);
     }
     result.add(MessageAction.reply);
     result.add(MessageAction.forward);
@@ -79,7 +83,7 @@ class MessageActionMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final actions = _actions;
+    final actions = _actions(context.watch<TranslationController>().enabled);
     // A single content-width row — never pad out to a second row when there
     // are only a handful of actions. Wraps to a second line only past 5.
     // Single horizontal row (scrolls if it ever overflows) — never a 5+1 wrap.
