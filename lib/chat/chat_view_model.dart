@@ -139,6 +139,7 @@ class ChatViewModel extends ChangeNotifier {
   String sendDisabledReason = ''; // shown in the disabled composer bar
   bool _chatCanSend = true; // chat-wide default can_send_basic_messages
   bool peerIsBot = false;
+  bool botStartSent = false;
   BotMenuInfo? botMenu;
   List<BotCommandOption> botCommands = const [];
 
@@ -437,6 +438,27 @@ class ChatViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  void sendBotStart() {
+    if (!peerIsBot) return;
+    draft = '';
+    botStartSent = true;
+    _sendText('/start');
+    notifyListeners();
+  }
+
+  void _sendText(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return;
+    _client.send({
+      '@type': 'sendMessage',
+      'chat_id': chatId,
+      'input_message_content': {
+        '@type': 'inputMessageText',
+        'text': {'@type': 'formattedText', 'text': trimmed},
+      },
+    });
+  }
+
   /// Sends text that may contain inline custom emoji — [entities] is the list of
   /// TDLib textEntity objects (e.g. textEntityTypeCustomEmoji) over [text]
   /// (offsets in UTF-16 of [text], which already has the fallback chars).
@@ -520,7 +542,7 @@ class ChatViewModel extends ChangeNotifier {
     return out;
   }
 
-  void sendPhoto(String path) {
+  void sendPhoto(String path, {String caption = ''}) {
     _client.send({
       '@type': 'sendMessage',
       'chat_id': chatId,
@@ -530,11 +552,13 @@ class ChatViewModel extends ChangeNotifier {
           '@type': 'inputPhoto',
           'photo': {'@type': 'inputFileLocal', 'path': path},
         },
+        if (caption.trim().isNotEmpty)
+          'caption': {'@type': 'formattedText', 'text': caption.trim()},
       },
     });
   }
 
-  void sendVideo(String path) {
+  void sendVideo(String path, {String caption = ''}) {
     _client.send({
       '@type': 'sendMessage',
       'chat_id': chatId,
@@ -545,11 +569,13 @@ class ChatViewModel extends ChangeNotifier {
           'video': {'@type': 'inputFileLocal', 'path': path},
           'supports_streaming': true,
         },
+        if (caption.trim().isNotEmpty)
+          'caption': {'@type': 'formattedText', 'text': caption.trim()},
       },
     });
   }
 
-  void sendAnimation(String path) {
+  void sendAnimation(String path, {String caption = ''}) {
     _client.send({
       '@type': 'sendMessage',
       'chat_id': chatId,
@@ -559,6 +585,8 @@ class ChatViewModel extends ChangeNotifier {
         'duration': 0,
         'width': 0,
         'height': 0,
+        if (caption.trim().isNotEmpty)
+          'caption': {'@type': 'formattedText', 'text': caption.trim()},
       },
     });
   }
@@ -580,7 +608,7 @@ class ChatViewModel extends ChangeNotifier {
     });
   }
 
-  void sendDocument(String path) {
+  void sendDocument(String path, {String caption = ''}) {
     _client.send({
       '@type': 'sendMessage',
       'chat_id': chatId,
@@ -590,6 +618,8 @@ class ChatViewModel extends ChangeNotifier {
           '@type': 'inputDocument',
           'document': {'@type': 'inputFileLocal', 'path': path},
         },
+        if (caption.trim().isNotEmpty)
+          'caption': {'@type': 'formattedText', 'text': caption.trim()},
       },
     });
   }
@@ -641,12 +671,36 @@ class ChatViewModel extends ChangeNotifier {
   }
 
   /// 音频搜索: send a clean copy of an existing Telegram audio message.
-  Future<void> sendAudioFromMessage(int sourceChatId, int messageId) async {
+  Future<void> sendAudioFromMessage(
+    int sourceChatId,
+    ChatMessage message,
+  ) async {
+    final music = message.music;
+    final fileId = music?.file?.id;
+    if (music != null && fileId != null && fileId > 0) {
+      try {
+        await _client.query({
+          '@type': 'sendMessage',
+          'chat_id': chatId,
+          'input_message_content': {
+            '@type': 'inputMessageAudio',
+            'audio': {
+              '@type': 'inputAudio',
+              'audio': {'@type': 'inputFileId', 'id': fileId},
+              'duration': music.duration,
+              'title': music.title,
+              'performer': music.performer ?? '',
+            },
+          },
+        });
+        return;
+      } catch (_) {}
+    }
     await _client.query({
       '@type': 'forwardMessages',
       'chat_id': chatId,
       'from_chat_id': sourceChatId,
-      'message_ids': [messageId],
+      'message_ids': [message.id],
       'options': {'@type': 'messageSendOptions'},
       'send_copy': true,
       'remove_caption': false,

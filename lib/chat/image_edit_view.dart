@@ -13,6 +13,13 @@ enum _EditTool { crop, mask, draw, text }
 
 enum _CropDrag { none, move, topLeft, topRight, bottomLeft, bottomRight }
 
+class ImageEditResult {
+  const ImageEditResult({required this.path, this.caption = ''});
+
+  final String path;
+  final String caption;
+}
+
 class ImageEditView extends StatefulWidget {
   const ImageEditView({
     super.key,
@@ -37,10 +44,17 @@ class _ImageEditViewState extends State<ImageEditView> {
   Offset? _lastImagePoint;
   final List<_Stroke> _strokes = [];
   final List<_TextLabel> _labels = [];
+  final _captionController = TextEditingController();
   _Stroke? _activeStroke;
   double _drawSize = 8;
   double _maskSize = 34;
   bool _saving = false;
+
+  @override
+  void dispose() {
+    _captionController.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -320,7 +334,18 @@ class _ImageEditViewState extends State<ImageEditView> {
         '${dir.path}/mithka_edit_${DateTime.now().microsecondsSinceEpoch}.png',
       );
       await file.writeAsBytes(data.buffer.asUint8List());
-      if (mounted) Navigator.of(context).pop(file.path);
+      if (mounted) {
+        if (widget.avatar) {
+          Navigator.of(context).pop(file.path);
+        } else {
+          Navigator.of(context).pop(
+            ImageEditResult(
+              path: file.path,
+              caption: _captionController.text.trim(),
+            ),
+          );
+        }
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -507,8 +532,43 @@ class _ImageEditViewState extends State<ImageEditView> {
                       },
                     ),
             ),
+            if (!widget.avatar) _captionField(context),
             _toolBar(context),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _captionField(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111111),
+        border: Border(
+          top: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+      ),
+      child: TextField(
+        controller: _captionController,
+        minLines: 1,
+        maxLines: 3,
+        textInputAction: TextInputAction.newline,
+        style: const TextStyle(color: Colors.white, fontSize: 15),
+        decoration: InputDecoration(
+          hintText: '添加说明…',
+          hintStyle: const TextStyle(color: Colors.white54),
+          filled: true,
+          fillColor: Colors.white.withValues(alpha: 0.08),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(18),
+            borderSide: BorderSide.none,
+          ),
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 10,
+          ),
         ),
       ),
     );

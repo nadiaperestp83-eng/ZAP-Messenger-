@@ -28,7 +28,7 @@ class AudioSearchView extends StatefulWidget {
     this.selectOnly = false,
   });
 
-  final Future<void> Function(int sourceChatId, int messageId)? onSend;
+  final Future<void> Function(int sourceChatId, ChatMessage message)? onSend;
   final Future<void> Function()? onPickLocal;
   final String initialQuery;
   final bool selectOnly;
@@ -160,7 +160,7 @@ class _AudioSearchViewState extends State<AudioSearchView> {
     if (_sendingMessageId != null) return;
     setState(() => _sendingMessageId = result.message.id);
     try {
-      await send(result.sourceChatId, result.message.id);
+      await send(result.sourceChatId, result.message);
       if (mounted) Navigator.of(context).pop();
     } catch (_) {
       if (!mounted) return;

@@ -767,7 +767,9 @@ class _ChatInputBarState extends State<ChatInputBar> {
           widget.vm.sendAnimation(x.path);
         } else {
           final edited = await _editImage(x.path);
-          if (edited != null) widget.vm.sendPhoto(edited);
+          if (edited != null) {
+            widget.vm.sendPhoto(edited.path, caption: edited.caption);
+          }
         }
       }
     } catch (_) {
@@ -781,14 +783,16 @@ class _ChatInputBarState extends State<ChatInputBar> {
       final shot = await ImagePicker().pickImage(source: ImageSource.camera);
       if (shot == null) return;
       final edited = await _editImage(shot.path);
-      if (edited != null) widget.vm.sendPhoto(edited);
+      if (edited != null) {
+        widget.vm.sendPhoto(edited.path, caption: edited.caption);
+      }
     } catch (_) {
       _pickFailed('相机');
     }
   }
 
-  Future<String?> _editImage(String path) {
-    return Navigator.of(context).push<String>(
+  Future<ImageEditResult?> _editImage(String path) {
+    return Navigator.of(context).push<ImageEditResult>(
       MaterialPageRoute(
         fullscreenDialog: true,
         builder: (_) => ImageEditView(sourcePath: path),
@@ -858,7 +862,9 @@ class _ChatInputBarState extends State<ChatInputBar> {
     await file.writeAsBytes(data, flush: true);
     if (!mounted) return;
     final edited = await _editImage(file.path);
-    if (edited != null) widget.vm.sendPhoto(edited);
+    if (edited != null) {
+      widget.vm.sendPhoto(edited.path, caption: edited.caption);
+    }
   }
 
   String _extensionForMime(String mimeType) {
@@ -937,7 +943,20 @@ class _ChatInputBarState extends State<ChatInputBar> {
   /// 音频: pick a local audio file and send it as a music message.
   Future<void> _pickLocalAudio() async {
     try {
-      final result = await FilePicker.platform.pickFiles(type: FileType.audio);
+      var result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const [
+          'mp3',
+          'm4a',
+          'aac',
+          'flac',
+          'wav',
+          'ogg',
+          'opus',
+          'amr',
+        ],
+      );
+      result ??= await FilePicker.platform.pickFiles(type: FileType.any);
       final path = result?.files.single.path;
       if (path != null) widget.vm.sendAudio(path);
     } catch (_) {

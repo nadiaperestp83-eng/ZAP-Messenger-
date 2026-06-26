@@ -1201,6 +1201,13 @@ class _ChatViewState extends State<ChatView> {
   // MARK: - Composer area (input bar / join bar / disabled bar)
 
   Widget _composerArea() {
+    if (_vm.peerIsBot &&
+        _vm.initialLoaded &&
+        _vm.messages.isEmpty &&
+        !_vm.botStartSent &&
+        _vm.canSendMessages) {
+      return _botStartBar();
+    }
     if (_vm.canSendMessages) {
       return ChatInputBar(vm: _vm, onStartCall: _startCall);
     }
@@ -1208,6 +1215,42 @@ class _ChatViewState extends State<ChatView> {
     // Subscribed to a channel you can't post in → mute/unmute (like official).
     if (_vm.isChannel && _vm.isMember) return _channelMuteBar();
     return _disabledComposer(_vm.sendDisabledReason);
+  }
+
+  Widget _botStartBar() {
+    final c = context.colors;
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        10,
+        16,
+        10 + MediaQuery.of(context).padding.bottom,
+      ),
+      decoration: BoxDecoration(
+        color: c.navBar,
+        border: Border(top: BorderSide(color: c.divider, width: 0.5)),
+      ),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _vm.sendBotStart,
+        child: Container(
+          height: 46,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            gradient: AppTheme.brandGradient,
+            borderRadius: BorderRadius.circular(23),
+          ),
+          child: const Text(
+            'Start',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _channelMuteBar() {

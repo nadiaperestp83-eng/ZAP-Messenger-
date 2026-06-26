@@ -11,6 +11,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../chat/chat_view.dart';
+import '../components/photo_avatar.dart';
 import '../components/sf_symbols.dart';
 import '../components/ui_components.dart';
 import '../tdlib/json_helpers.dart';
@@ -159,24 +160,89 @@ class _SearchViewState extends State<SearchView> {
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         itemCount: _vm.results.length,
         itemBuilder: (context, i) {
-          final chat = _vm.results[i];
+          final hit = _vm.results[i];
           return Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        ChatView(chatId: chat.id, title: chat.title),
-                  ),
-                ),
-                child: ChatRowView(chat: chat),
+                onTap: () => _open(hit),
+                child: hit.chat != null
+                    ? ChatRowView(chat: hit.chat!)
+                    : _hitRow(hit),
               ),
               const InsetDivider(leadingInset: 78),
             ],
           );
         },
+      ),
+    );
+  }
+
+  Future<void> _open(SearchHit hit) async {
+    final chat = hit.chat;
+    if (chat != null) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ChatView(chatId: chat.id, title: chat.title),
+        ),
+      );
+      return;
+    }
+    final userId = hit.userId;
+    if (userId == null) return;
+    try {
+      final chat = await TdClient.shared.query({
+        '@type': 'createPrivateChat',
+        'user_id': userId,
+        'force': false,
+      });
+      final summary = TDParse.chat(chat);
+      if (!mounted || summary == null) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ChatView(chatId: summary.id, title: summary.title),
+        ),
+      );
+    } catch (_) {}
+  }
+
+  Widget _hitRow(SearchHit hit) {
+    final c = context.colors;
+    return Container(
+      height: 66,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      color: c.background,
+      child: Row(
+        children: [
+          PhotoAvatar(title: hit.title, photo: hit.photo, size: 54),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  hit.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: c.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  hit.subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 13, color: c.textSecondary),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -193,7 +259,7 @@ class _SearchViewState extends State<SearchView> {
 }
 
 class SearchViewModel extends ChangeNotifier {
-  List<ChatSummary> results = [];
+  List<SearchHit> results = [];
   String _currentQuery = '';
 
   void search(String q) {
@@ -209,26 +275,135 @@ class SearchViewModel extends ChangeNotifier {
 
   Future<void> _run(String trimmed) async {
     try {
-      final res = await TdClient.shared.query({
-        '@type': 'searchChats',
-        'query': trimmed,
-        'limit': 50,
-      });
-      final ids = res.int64Array('chat_ids') ?? const <int>[];
-      final out = <ChatSummary>[];
-      for (final id in ids.take(50)) {
+      final out = <SearchHit>[];
+      final seenChats = <int>{};
+      final seenUsers = <int>{};
+
+      Future<void> addChat(int id, {String? subtitle}) async {
+        if (!seenChats.add(id)) return;
         try {
           final chat = await TdClient.shared.query({
             '@type': 'getChat',
             'chat_id': id,
           });
           final s = TDParse.chat(chat);
-          if (s != null) out.add(s);
+          if (s == null) return;
+          out.add(SearchHit.chat(s, subtitle: subtitle));
+          final uid = s.peerUserId;
+          if (uid != null) seenUsers.add(uid);
         } catch (_) {}
       }
+
+      final local = await TdClient.shared.query({
+        '@type': 'searchChats',
+        'query': trimmed,
+        'limit': 50,
+      });
+      for (final id in (local.int64Array('chat_ids') ?? const <int>[]).take(
+        50,
+      )) {
+        await addChat(id);
+      }
+
+      try {
+        final contacts = await TdClient.shared.query({
+          '@type': 'searchContacts',
+          'query': trimmed,
+          'limit': 50,
+        });
+        for (final id in contacts.int64Array('user_ids') ?? const <int>[]) {
+          if (!seenUsers.add(id)) continue;
+          try {
+            final user = await TdClient.shared.query({
+              '@type': 'getUser',
+              'user_id': id,
+            });
+            out.add(SearchHit.user(id, user));
+          } catch (_) {}
+        }
+      } catch (_) {}
+
+      try {
+        final public = await TdClient.shared.query({
+          '@type': 'searchPublicChats',
+          'query': trimmed,
+        });
+        for (final id in (public.int64Array('chat_ids') ?? const <int>[]).take(
+          30,
+        )) {
+          await addChat(id, subtitle: '公开群组/频道');
+        }
+      } catch (_) {}
+
+      final handle = _usernameOf(trimmed);
+      if (handle != null) {
+        try {
+          final chat = await TdClient.shared.query({
+            '@type': 'searchPublicChat',
+            'username': handle,
+          });
+          final id = chat.int64('id');
+          if (id != null) await addChat(id, subtitle: '@$handle');
+        } catch (_) {}
+      }
+
       if (trimmed != _currentQuery) return; // stale
       results = out;
       notifyListeners();
     } catch (_) {}
+  }
+
+  String? _usernameOf(String q) {
+    var s = q.trim();
+    final link = RegExp(
+      r'(?:https?://)?(?:t\.me|telegram\.me)/(@?[A-Za-z0-9_]+)',
+      caseSensitive: false,
+    ).firstMatch(s);
+    if (link != null) s = link.group(1)!;
+    if (s.startsWith('@')) s = s.substring(1);
+    return RegExp(r'^[A-Za-z0-9_]{3,32}$').hasMatch(s) ? s : null;
+  }
+}
+
+class SearchHit {
+  SearchHit({
+    required this.title,
+    required this.subtitle,
+    this.photo,
+    this.chat,
+    this.userId,
+  });
+
+  factory SearchHit.chat(ChatSummary chat, {String? subtitle}) => SearchHit(
+    title: chat.title,
+    subtitle: subtitle ?? _chatSubtitle(chat),
+    photo: chat.photo,
+    chat: chat,
+    userId: chat.peerUserId,
+  );
+
+  factory SearchHit.user(int id, Map<String, dynamic> user) {
+    final username = user.obj('usernames')?.str('editable_username');
+    return SearchHit(
+      title: TDParse.userName(user),
+      subtitle: username != null && username.isNotEmpty
+          ? '@$username'
+          : TDParse.userStatus(user),
+      photo: TDParse.smallPhoto(user.obj('profile_photo')),
+      userId: id,
+    );
+  }
+
+  final String title;
+  final String subtitle;
+  final TdFileRef? photo;
+  final ChatSummary? chat;
+  final int? userId;
+
+  static String _chatSubtitle(ChatSummary chat) {
+    if (chat.kind == ChatKind.group) return '群组';
+    if (chat.kind == ChatKind.channel) return '频道';
+    if (chat.kind == ChatKind.bot) return '机器人';
+    return chat.lastMessage.isEmpty ? '聊天' : chat.lastMessage;
   }
 }
