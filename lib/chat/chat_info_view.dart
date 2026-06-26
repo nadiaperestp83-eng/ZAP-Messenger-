@@ -557,20 +557,26 @@ class _ChatInfoViewState extends State<ChatInfoView> {
 
   Widget _toggleRow(String title, bool value, ValueChanged<bool> onChanged) {
     final c = context.colors;
-    return SizedBox(
-      height: 52,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        child: Row(
-          children: [
-            Text(title, style: TextStyle(fontSize: 15, color: c.textPrimary)),
-            const Spacer(),
-            CupertinoSwitch(
-              value: value,
-              activeTrackColor: AppTheme.brand,
-              onChanged: onChanged,
-            ),
-          ],
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => onChanged(!value),
+      child: SizedBox(
+        height: 52,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Row(
+            children: [
+              Text(title, style: TextStyle(fontSize: 15, color: c.textPrimary)),
+              const Spacer(),
+              IgnorePointer(
+                child: CupertinoSwitch(
+                  value: value,
+                  activeTrackColor: AppTheme.brand,
+                  onChanged: onChanged,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1245,7 +1251,7 @@ class ChatInfoViewModel extends ChangeNotifier {
     notifyListeners();
     TdClient.shared
         .query({
-          '@type': 'setChatChatList',
+          '@type': 'addChatToList',
           'chat_id': chatId,
           'chat_list': {'@type': value ? 'chatListArchive' : 'chatListMain'},
         })

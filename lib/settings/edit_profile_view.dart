@@ -8,6 +8,8 @@
 //  TDLib.
 //
 
+import 'dart:io';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../components/toast.dart';
@@ -270,12 +272,18 @@ class _EditProfileViewState extends State<EditProfileView> {
         ),
       );
       if (edited == null) return;
+      final file = File(edited);
+      if (!await file.exists() || await file.length() == 0) {
+        _toast('头像文件无效');
+        return;
+      }
       await _client.query({
         '@type': 'setProfilePhoto',
         'photo': {
           '@type': 'inputChatPhotoStatic',
           'photo': {'@type': 'inputFileLocal', 'path': edited},
         },
+        'is_public': false,
       });
       if (!mounted) return;
       _toast('头像已更新');
@@ -285,8 +293,8 @@ class _EditProfileViewState extends State<EditProfileView> {
       if (mounted) {
         setState(() => _photo = TDParse.smallPhoto(me.obj('profile_photo')));
       }
-    } catch (_) {
-      _toast('更换头像失败');
+    } catch (e) {
+      _toast('更换头像失败：$e');
     }
   }
 

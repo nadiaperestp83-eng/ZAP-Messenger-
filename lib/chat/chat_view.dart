@@ -40,6 +40,7 @@ import 'link_handler.dart';
 import 'message_action_menu.dart';
 import 'message_bubble.dart';
 import 'sticker_set_detail_view.dart';
+import 'sticker_viewer.dart';
 import 'video_player_view.dart';
 
 class ChatView extends StatefulWidget {
@@ -765,6 +766,15 @@ class _ChatViewState extends State<ChatView> {
         fullscreenDialog: true,
         builder: (_) =>
             FullImageViewer(items: items, startIndex: start < 0 ? 0 : start),
+      ),
+    );
+  }
+
+  void _openSticker(ChatMessage message) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => StickerViewer(message: message),
       ),
     );
   }
@@ -1746,6 +1756,7 @@ class _ChatViewState extends State<ChatView> {
                     },
                     onOpenReply: (messageId) => _scrollToMessage(messageId),
                     onOpenImage: _openImage,
+                    onOpenSticker: _openSticker,
                     onPlayVideo: _playVideo,
                     onButtonTap: _pressMessageButton,
                     isRead: _vm.isRead(message),

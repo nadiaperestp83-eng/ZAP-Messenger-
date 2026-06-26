@@ -1,0 +1,148 @@
+name: Master APK
+
+# Every push to master builds a signed arm64-v8a APK and posts it to the
+# configured Telegram CI channel. This is intentionally not a release workflow:
+# it does not bump pubspec.yaml, create tags, or publish GitHub Releases.
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: master-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-upload:
+    name: Build arm64-v8a APK and upload
+    runs-on: ubuntu-latest
+    env:
+      ABI: arm64-v8a
+      TARGET_PLATFORM: android-arm64
+      NDK_VERSION: 28.2.13676358
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build gperf clang libssl-dev
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.2'
+          channel: stable
+          cache: true
+
+      - name: Install Android NDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$NDK_VERSION" >/dev/null 2>&1 || \
+          yes | sdkmanager "ndk;$NDK_VERSION" >/dev/null 2>&1 || true
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+
+      - name: Cache native build (.tdlib-build)
+        uses: actions/cache@v4
+        with:
+          path: .tdlib-build
+          key: tdnative-${{ runner.os }}-ndk28-${{ env.ABI }}-${{ hashFiles('scripts/build-tdjson-android.sh', 'scripts/build-openssl-android.sh') }}
+          restore-keys: |
+            tdnative-${{ runner.os }}-ndk28-${{ env.ABI }}-
+
+      - name: Cache jniLibs (${{ env.ABI }})
+        id: jnilibs-cache
+        uses: actions/cache@v4
+        with:
+          path: android/app/src/main/jniLibs/${{ env.ABI }}
+          key: jnilibs-${{ runner.os }}-ndk28-${{ env.ABI }}-${{ hashFiles('scripts/build-tdjson-android.sh', 'scripts/build-openssl-android.sh') }}
+          restore-keys: |
+            jnilibs-${{ runner.os }}-ndk28-${{ env.ABI }}-
+
+      - name: Check cached tdjson
+        id: tdjson
+        run: |
+          if [ -s "android/app/src/main/jniLibs/$ABI/libtdjson.so" ]; then
+            echo "cached=true" >> "$GITHUB_OUTPUT"
+            ls -lh "android/app/src/main/jniLibs/$ABI/libtdjson.so"
+          else
+            echo "cached=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build static OpenSSL (${{ env.ABI }})
+        if: steps.tdjson.outputs.cached != 'true'
+        run: ./scripts/build-openssl-android.sh "$ABI"
+
+      - name: Build libtdjson.so (${{ env.ABI }})
+        if: steps.tdjson.outputs.cached != 'true'
+        env:
+          HOST_OPENSSL_ROOT_DIR: /usr
+          TD_ENABLE_LTO: 'OFF'
+        run: ./scripts/build-tdjson-android.sh "$ABI"
+
+      - name: Flutter dependencies
+        run: flutter pub get
+
+      - name: Write secrets.dart
+        env:
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+        run: |
+          mkdir -p lib/config
+          cat > lib/config/secrets.dart <<EOF
+          class Secrets {
+            static const int apiId = ${TELEGRAM_API_ID:-0};
+            static const String apiHash = '${TELEGRAM_API_HASH}';
+            static bool get isConfigured => apiId != 0 && apiHash.isNotEmpty;
+          }
+          EOF
+
+      - name: Decode signing keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "No Android signing keystore configured; release APK will use fallback signing."
+            exit 0
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > android/app/upload-keystore.jks
+          cat > android/key.properties <<EOF
+          storePassword=$STORE_PASSWORD
+          keyPassword=${KEY_PASSWORD:-$STORE_PASSWORD}
+          keyAlias=$KEY_ALIAS
+          storeFile=upload-keystore.jks
+          EOF
+
+      - name: Build arm64-v8a release APK
+        run: flutter build apk --release --split-per-abi --target-platform "$TARGET_PLATFORM"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-${{ env.ABI }}
+          path: build/app/outputs/flutter-apk/app-${{ env.ABI }}-release.apk
+          if-no-files-found: error
+
+      - name: Upload APK to Telegram channel
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CI_CHANNEL: ${{ secrets.TELEGRAM_CI_CHANNEL }}
+          APK_PATH: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+        run: |
+          test -n "$TELEGRAM_BOT_TOKEN"
+          test -n "$TELEGRAM_CI_CHANNEL"
+          curl -fsS \
+            -F "chat_id=$TELEGRAM_CI_CHANNEL" \
+            -F "document=@$APK_PATH" \
+            -F "caption=Mithka master ${GITHUB_SHA::7} · arm64-v8a" \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument"

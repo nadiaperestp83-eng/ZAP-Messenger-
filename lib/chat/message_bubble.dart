@@ -58,6 +58,7 @@ class MessageBubble extends StatefulWidget {
     this.onAvatarLongPress,
     this.onOpenReply,
     this.onOpenImage,
+    this.onOpenSticker,
     this.onPlayVideo,
     this.onButtonTap,
     this.onToggleReaction,
@@ -79,6 +80,7 @@ class MessageBubble extends StatefulWidget {
   final ValueChanged<ChatMessage>? onAvatarLongPress;
   final ValueChanged<int>? onOpenReply;
   final ValueChanged<ChatMessage>? onOpenImage;
+  final ValueChanged<ChatMessage>? onOpenSticker;
   final ValueChanged<ChatMessage>? onPlayVideo;
   final void Function(ChatMessage message, MessageButton button)? onButtonTap;
   final ValueChanged<MessageReaction>? onToggleReaction;
@@ -235,14 +237,14 @@ class _MessageBubbleState extends State<MessageBubble>
                     mainAxisAlignment: MainAxisAlignment.end,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      if (widget.showRepeat) _repeatBadge(),
-                      if (widget.showRepeat) const SizedBox(width: 6),
                       Flexible(
                         child: Align(
                           alignment: Alignment.centerRight,
                           child: content,
                         ),
                       ),
+                      if (widget.showRepeat) const SizedBox(width: 6),
+                      if (widget.showRepeat) _repeatBadge(),
                     ],
                   ),
                 ),
@@ -418,7 +420,7 @@ class _MessageBubbleState extends State<MessageBubble>
     late final Widget body;
     if (message.isCall) {
       body = _callBubble(outgoing);
-      return _withButtonRows(body, outgoing);
+      return _withButtonRows(_withFloatingMeta(body, outgoing), outgoing);
     }
     if (message.animatedSticker != null) {
       final s = _stickerSize();
@@ -442,7 +444,10 @@ class _MessageBubbleState extends State<MessageBubble>
           ],
         ),
       );
-      return _withButtonRows(body, outgoing);
+      return _withButtonRows(
+        _withFloatingMeta(_stickerTap(body), outgoing),
+        outgoing,
+      );
     }
     if (message.videoSticker != null) {
       final s = _stickerSize();
@@ -467,10 +472,15 @@ class _MessageBubbleState extends State<MessageBubble>
           ],
         ),
       );
-      return _withButtonRows(body, outgoing);
+      return _withButtonRows(
+        _withFloatingMeta(_stickerTap(body), outgoing),
+        outgoing,
+      );
     }
     if (message.video != null) {
       body = _videoContent(outgoing);
+    } else if (message.stickerFileId != null && message.image != null) {
+      body = _staticStickerContent(message.image!);
     } else if (message.image != null) {
       body = _imageContent(message.image!, outgoing);
     } else if (message.music != null) {
@@ -484,8 +494,62 @@ class _MessageBubbleState extends State<MessageBubble>
     } else {
       body = _textBubble(message.text, outgoing);
     }
-    return _withButtonRows(body, outgoing);
+    return _withButtonRows(_withFloatingMeta(body, outgoing), outgoing);
   }
+
+  Widget _withFloatingMeta(Widget child, bool outgoing) {
+    final show =
+        context.watch<ThemeController>().showMessageMetaIndicators &&
+        (message.isEdited || outgoing);
+    if (!show) return child;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        child,
+        Positioned(right: 5, bottom: 3, child: _floatingMeta(outgoing)),
+      ],
+    );
+  }
+
+  Widget _floatingMeta(bool outgoing) {
+    final c = context.colors;
+    final faint = outgoing
+        ? Colors.white.withValues(alpha: 0.72)
+        : c.textTertiary;
+    return IgnorePointer(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: outgoing
+              ? Colors.black.withValues(alpha: 0.10)
+              : c.card.withValues(alpha: 0.72),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (message.isEdited)
+                Icon(Icons.edit_rounded, size: 13, color: faint),
+              if (message.isEdited && outgoing) const SizedBox(width: 3),
+              if (outgoing)
+                Icon(
+                  widget.isRead ? Icons.done_all : Icons.done,
+                  size: 14,
+                  color: widget.isRead ? Colors.white : faint,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _stickerTap(Widget child) => GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onTap: () => widget.onOpenSticker?.call(message),
+    child: child,
+  );
 
   Widget _withButtonRows(Widget body, bool outgoing) {
     if (message.buttonRows.isEmpty) return body;
@@ -565,7 +629,6 @@ class _MessageBubbleState extends State<MessageBubble>
 
   Widget _textBubble(String text, bool outgoing) {
     final c = context.colors;
-    final showMeta = context.watch<ThemeController>().showMessageMetaIndicators;
     final baseColor = outgoing
         ? AppTheme.bubbleOutgoingText
         : c.bubbleIncomingText;
@@ -597,13 +660,7 @@ class _MessageBubbleState extends State<MessageBubble>
             _linkPreviewCard(message.linkPreview!, outgoing),
             if (text.isNotEmpty) const SizedBox(height: 6),
           ],
-          ..._richTextWidgets(
-            text,
-            baseColor,
-            linkColor,
-            outgoing,
-            showMeta && (widget.message.isEdited || outgoing),
-          ),
+          ..._richTextWidgets(text, baseColor, linkColor, outgoing, false),
           if (message.linkPreview != null &&
               !message.linkPreview!.showAboveText) ...[
             if (text.isNotEmpty) const SizedBox(height: 7),
@@ -1673,6 +1730,23 @@ class _MessageBubbleState extends State<MessageBubble>
           _textBubble(caption, outgoing),
         ],
       ],
+    );
+  }
+
+  Widget _staticStickerContent(TdFileRef image) {
+    final size = _stickerSize();
+    return _stickerTap(
+      SizedBox(
+        width: size.width,
+        height: size.height,
+        child: TDImage(
+          photo: image,
+          cornerRadius: 8,
+          fit: BoxFit.contain,
+          cacheWidth: _cachePx(size.width),
+          cacheHeight: _cachePx(size.height),
+        ),
+      ),
     );
   }
 
