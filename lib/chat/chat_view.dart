@@ -510,6 +510,18 @@ class _ChatViewState extends State<ChatView> {
   bool get _canBackSwipe =>
       widget.showBackButton && !_isSelecting && _actionTarget == null;
 
+  Future<void> _dismissKeyboardForExit() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+  }
+
+  Future<void> _popChat() async {
+    if (!mounted) return;
+    await _dismissKeyboardForExit();
+    if (!mounted) return;
+    await Navigator.of(context).maybePop();
+  }
+
   void _onBackSwipePointerDown(PointerDownEvent event) {
     if (!_canBackSwipe) return;
     _backSwipeDx = 0;
@@ -546,7 +558,7 @@ class _ChatViewState extends State<ChatView> {
     if (_backSwipePopping || !mounted) return;
     _backSwipePopping = true;
     try {
-      await Navigator.of(context).maybePop();
+      await _popChat();
     } finally {
       _backSwipePopping = false;
     }
@@ -746,6 +758,7 @@ class _ChatViewState extends State<ChatView> {
 
   @override
   void dispose() {
+    unawaited(_dismissKeyboardForExit());
     _bannerTimer?.cancel();
     _vm.removeListener(_onModel);
     _vm.onDisappear();
@@ -1491,7 +1504,7 @@ class _ChatViewState extends State<ChatView> {
               if (widget.showBackButton)
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTap: () => Navigator.of(context).pop(),
+                  onTap: () => unawaited(_popChat()),
                   child: Padding(
                     padding: const EdgeInsets.only(right: 10),
                     child: Icon(

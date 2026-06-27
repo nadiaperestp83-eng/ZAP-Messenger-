@@ -14,6 +14,7 @@ import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:fvp/fvp.dart' as fvp;
 import 'package:provider/provider.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app/content_view.dart';
@@ -28,8 +29,22 @@ import 'settings/translation_controller.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_controller.dart';
 
+const _sentryDsn = String.fromEnvironment(
+  'SENTRY_DSN',
+  defaultValue: 'https://e85539eab496812b3e07f19a5d08d55d@sentry.nekoko.it/9',
+);
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await SentryFlutter.init((options) {
+    options.dsn = _sentryDsn;
+    options.environment = kReleaseMode ? 'production' : 'development';
+    options.attachScreenshot = false;
+    options.enableAutoSessionTracking = true;
+  }, appRunner: _runApp);
+}
+
+Future<void> _runApp() async {
   // Route video_player through the MDK/FFmpeg backend so .webm (VP9 + alpha)
   // video stickers decode + play (and stay transparent).
   //
@@ -53,6 +68,12 @@ Future<void> main() async {
   ]);
   await Firebase.initializeApp();
   final appVersion = await AppVersion.load();
+  await Sentry.configureScope((scope) async {
+    await scope.setTag('app.version_name', appVersion.version);
+    await scope.setTag('app.build_number', appVersion.buildNumber);
+    await scope.setTag('git.commit', appVersion.commit);
+    await scope.setContexts('app_version', appVersion.analyticsParameters);
+  });
   await FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(true);
   await FirebaseAnalytics.instance.setDefaultEventParameters(
     appVersion.analyticsParameters,
@@ -62,7 +83,7 @@ Future<void> main() async {
   );
   final prefs = await SharedPreferences.getInstance();
   KeywordBlocker.shared.initialize(prefs);
-  runApp(MithkaApp(prefs: prefs));
+  runApp(SentryWidget(child: MithkaApp(prefs: prefs)));
 }
 
 class MithkaApp extends StatefulWidget {
@@ -158,6 +179,7 @@ class _MithkaAppState extends State<MithkaApp> {
             debugShowCheckedModeBanner: false,
             navigatorObservers: [
               FirebaseAnalyticsObserver(analytics: FirebaseAnalytics.instance),
+              SentryNavigatorObserver(),
             ],
             theme: _themeData(Brightness.light, theme),
             darkTheme: _themeData(Brightness.dark, theme),

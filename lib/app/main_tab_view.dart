@@ -10,6 +10,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../call/call_manager.dart';
@@ -109,6 +110,11 @@ class _MainTabViewState extends State<MainTabView> {
     if (theme.showMomentsTab) _allTabs[3],
   ];
 
+  Future<void> _dismissKeyboard() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+  }
+
   Widget _root(int i) => switch (i) {
     0 => ChatListView(controller: _chatListController),
     1 => const TopicChannelsView(),
@@ -120,11 +126,13 @@ class _MainTabViewState extends State<MainTabView> {
     if (_selection == 0 &&
         _usesMessageSplit(context) &&
         _selectedMessageChat != null) {
+      await _dismissKeyboard();
       setState(() => _selectedMessageChat = null);
       return false;
     }
     final nav = _navKeys[_selection].currentState;
     if (nav != null && nav.canPop()) {
+      await _dismissKeyboard();
       nav.pop();
       return false;
     }
