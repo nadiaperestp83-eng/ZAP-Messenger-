@@ -41,8 +41,12 @@ class AboutView extends StatelessWidget {
                           gradient: AppTheme.brandGradient,
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: const Center(
-                          child: Text('🐧', style: TextStyle(fontSize: 46)),
+                        child: const Padding(
+                          padding: EdgeInsets.all(10),
+                          child: Image(
+                            image: AssetImage('assets/penguin.png'),
+                            fit: BoxFit.contain,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 14),
@@ -91,7 +95,7 @@ class AboutView extends StatelessWidget {
                         child: Divider(height: 1, color: c.divider),
                       ),
                       _AboutLinkRow(
-                        icon: Icons.code_rounded,
+                        icon: sfIcon('chevron.left.forwardslash.chevron.right'),
                         title: 'GitHub',
                         value: 'github.com/iebb/mithka',
                         onTap: () => openLink(context, _githubUrl),

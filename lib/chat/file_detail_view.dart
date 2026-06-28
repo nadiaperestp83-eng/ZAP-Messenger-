@@ -219,7 +219,7 @@ class _FileDetailViewState extends State<FileDetailView> {
                   shape: BoxShape.circle,
                   color: Color(0xFFFF3B30),
                 ),
-                child: const Icon(Icons.close, size: 20, color: Colors.white),
+                child: Icon(sfIcon('xmark'), size: 20, color: Colors.white),
               ),
             ),
           ],
@@ -263,7 +263,7 @@ class _FileDetailViewState extends State<FileDetailView> {
       child: Stack(
         alignment: Alignment.center,
         children: [
-          const Icon(Icons.insert_drive_file, size: 60, color: Colors.white),
+          Icon(sfIcon('doc.fill'), size: 60, color: Colors.white),
           if (widget.doc.ext.isNotEmpty)
             Positioned(
               bottom: 24,

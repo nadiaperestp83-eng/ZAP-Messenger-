@@ -375,7 +375,7 @@ class _ProfileViewState extends State<ProfileView> {
                   ),
                 ),
                 child: Icon(
-                  Icons.add_rounded,
+                  sfIcon('plus'),
                   size: 16,
                   color: Colors.white.withValues(alpha: 0.9),
                 ),
@@ -515,8 +515,7 @@ class _ProfileViewState extends State<ProfileView> {
     );
   }
 
-  /// Long-press an account row to remove it from the switcher — for clearing a
-  /// leftover "未登录" entry or a logged-out account you no longer want.
+  /// Long-press an account row to remove it from the switcher.
   Future<void> _confirmRemoveAccount(
     AccountStore accounts,
     AccountSummary s,

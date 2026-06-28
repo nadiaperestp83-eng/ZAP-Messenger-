@@ -16,6 +16,7 @@ import 'package:fvp/fvp.dart' as fvp;
 import 'package:provider/provider.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'app/content_view.dart';
 import 'app/app_version.dart';
@@ -23,28 +24,22 @@ import 'app/app_navigator.dart';
 import 'auth/account_store.dart';
 import 'auth/auth_manager.dart';
 import 'components/drawer_controller.dart' as dc;
+import 'l10n/app_locale_controller.dart';
+import 'l10n/app_localizations.dart';
 import 'notifications/notification_controller.dart';
 import 'settings/keyword_blocker.dart';
 import 'settings/translation_controller.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_controller.dart';
 
-const _sentryDsn = String.fromEnvironment(
-  'SENTRY_DSN',
-  defaultValue: 'https://e85539eab496812b3e07f19a5d08d55d@sentry.nekoko.it/9',
+const _sentryDsn = String.fromEnvironment('SENTRY_DSN');
+const _sentryEnvironment = String.fromEnvironment(
+  'SENTRY_ENVIRONMENT',
+  defaultValue: 'production',
 );
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await SentryFlutter.init((options) {
-    options.dsn = _sentryDsn;
-    options.environment = kReleaseMode ? 'production' : 'development';
-    options.attachScreenshot = false;
-    options.enableAutoSessionTracking = true;
-  }, appRunner: _runApp);
-}
-
-Future<void> _runApp() async {
   // Route video_player through the MDK/FFmpeg backend so .webm (VP9 + alpha)
   // video stickers decode + play (and stay transparent).
   //
@@ -68,12 +63,6 @@ Future<void> _runApp() async {
   ]);
   await Firebase.initializeApp();
   final appVersion = await AppVersion.load();
-  await Sentry.configureScope((scope) async {
-    await scope.setTag('app.version_name', appVersion.version);
-    await scope.setTag('app.build_number', appVersion.buildNumber);
-    await scope.setTag('git.commit', appVersion.commit);
-    await scope.setContexts('app_version', appVersion.analyticsParameters);
-  });
   await FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(true);
   await FirebaseAnalytics.instance.setDefaultEventParameters(
     appVersion.analyticsParameters,
@@ -83,7 +72,19 @@ Future<void> _runApp() async {
   );
   final prefs = await SharedPreferences.getInstance();
   KeywordBlocker.shared.initialize(prefs);
-  runApp(SentryWidget(child: MithkaApp(prefs: prefs)));
+  final app = MithkaApp(prefs: prefs);
+  if (_sentryDsn.isEmpty) {
+    runApp(app);
+    return;
+  }
+
+  await SentryFlutter.init((options) {
+    options.dsn = _sentryDsn;
+    options.environment = _sentryEnvironment;
+    options.release = 'mithka@${appVersion.version}+${appVersion.buildNumber}';
+    options.sendDefaultPii = false;
+    options.tracesSampleRate = 0;
+  }, appRunner: () => runApp(app));
 }
 
 class MithkaApp extends StatefulWidget {
@@ -100,6 +101,7 @@ class _MithkaAppState extends State<MithkaApp> {
   late final TranslationController _translation = TranslationController(
     widget.prefs,
   );
+  late final AppLocaleController _locale = AppLocaleController(widget.prefs);
   late final AccountStore _accounts = AccountStore(widget.prefs);
   late final dc.DrawerController _drawer = dc.DrawerController();
 
@@ -168,18 +170,29 @@ class _MithkaAppState extends State<MithkaApp> {
         ChangeNotifierProvider.value(value: _auth),
         ChangeNotifierProvider.value(value: _theme),
         ChangeNotifierProvider.value(value: _translation),
+        ChangeNotifierProvider.value(value: _locale),
         ChangeNotifierProvider.value(value: _accounts),
         ChangeNotifierProvider<dc.DrawerController>.value(value: _drawer),
       ],
-      child: Consumer2<ThemeController, AccountStore>(
-        builder: (context, theme, accounts, _) {
+      child: Consumer3<ThemeController, AccountStore, AppLocaleController>(
+        builder: (context, theme, accounts, locale, _) {
           return MaterialApp(
             navigatorKey: appNavigatorKey,
             title: 'Mithka',
             debugShowCheckedModeBanner: false,
+            locale: locale.locale,
+            localeResolutionCallback: (locale, _) => locale == null
+                ? AppLocalizations.fallbackLocale
+                : AppLocalizations.resolve(locale),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+            ],
             navigatorObservers: [
               FirebaseAnalyticsObserver(analytics: FirebaseAnalytics.instance),
-              SentryNavigatorObserver(),
             ],
             theme: _themeData(Brightness.light, theme),
             darkTheme: _themeData(Brightness.dark, theme),
