@@ -271,7 +271,7 @@ class _AudioSearchViewState extends State<AudioSearchView> {
                 _controller.clear();
                 _onChanged('');
               },
-              child: Icon(Icons.cancel, size: 16, color: c.textTertiary),
+              child: Icon(sfIcon('xmark'), size: 16, color: c.textTertiary),
             ),
         ],
       ),
@@ -410,7 +410,7 @@ class _AudioSearchViewState extends State<AudioSearchView> {
         color: AppTheme.brand.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Icon(Icons.album_rounded, size: 25, color: c.textSecondary),
+      child: Icon(sfIcon('music.note.list'), size: 25, color: c.textSecondary),
     );
   }
 }

@@ -1265,16 +1265,16 @@ class _ChannelMomentsViewState extends State<ChannelMomentsView> {
               Row(
                 children: [
                   Icon(
-                    Icons.sentiment_satisfied_alt_outlined,
+                    sfIcon('face.smiling'),
                     size: 24,
                     color: c.textPrimary,
                   ),
                   const SizedBox(width: 18),
-                  Icon(Icons.text_fields, size: 24, color: c.textPrimary),
+                  Icon(sfIcon('textformat'), size: 24, color: c.textPrimary),
                   const SizedBox(width: 18),
                   Icon(sfIcon('photo'), size: 24, color: c.textPrimary),
                   const SizedBox(width: 18),
-                  Icon(Icons.alternate_email, size: 24, color: c.textPrimary),
+                  Icon(sfIcon('at'), size: 24, color: c.textPrimary),
                   const Spacer(),
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
@@ -1707,7 +1707,7 @@ class _ChannelMomentsSearchViewState extends State<ChannelMomentsSearchView> {
                             _onChanged('');
                           },
                           child: Icon(
-                            Icons.cancel,
+                            sfIcon('xmark'),
                             size: 16,
                             color: c.textTertiary,
                           ),
@@ -2811,7 +2811,7 @@ class _ChannelPostComposerViewState extends State<ChannelPostComposerView> {
     return SettingsCard(
       children: [
         SettingsRow(
-          leading: Icon(Icons.send_outlined, size: 22, color: c.textPrimary),
+          leading: Icon(sfIcon('paperplane'), size: 22, color: c.textPrimary),
           title: '发布至',
           value: _channel?.title ?? '选择频道',
           onTap: _selectChannel,
@@ -2821,7 +2821,7 @@ class _ChannelPostComposerViewState extends State<ChannelPostComposerView> {
         const InsetDivider(leadingInset: 56),
         SettingsSwitchRow(
           leading: Icon(
-            Icons.notifications_none_rounded,
+            sfIcon('bell'),
             size: 22,
             color: c.textPrimary,
           ),

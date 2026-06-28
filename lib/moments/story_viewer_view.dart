@@ -301,10 +301,10 @@ class _StoryViewerViewState extends State<StoryViewerView> {
                     ),
                     GestureDetector(
                       onTap: () => Navigator.of(context).pop(),
-                      child: const SizedBox(
+                      child: SizedBox(
                         width: 36,
                         height: 36,
-                        child: Icon(Icons.close, size: 22, color: Colors.white),
+                        child: Icon(sfIcon('xmark'), size: 22, color: Colors.white),
                       ),
                     ),
                   ],

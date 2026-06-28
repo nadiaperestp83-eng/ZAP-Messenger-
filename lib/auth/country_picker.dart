@@ -323,7 +323,7 @@ class _CountryPickerViewState extends State<CountryPickerView> {
                         _query = '';
                       }),
                       child: Icon(
-                        Icons.cancel,
+                        sfIcon('xmark'),
                         size: 18,
                         color: c.textTertiary,
                       ),

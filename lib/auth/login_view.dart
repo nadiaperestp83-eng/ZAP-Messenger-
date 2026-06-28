@@ -478,7 +478,7 @@ class _LoginViewState extends State<LoginView> {
       padding: const EdgeInsets.only(top: 12),
       child: Column(
         children: [
-          Icon(Icons.warning_rounded, size: 40, color: AppTheme.unreadBadge),
+          Icon(sfIcon('exclamationmark.triangle.fill'), size: 40, color: AppTheme.unreadBadge),
           const SizedBox(height: 12),
           Text(
             '尚未配置 Telegram API 凭证',
@@ -657,7 +657,7 @@ class _InputFieldState extends State<InputField> {
               child: Padding(
                 padding: const EdgeInsets.only(left: 8),
                 child: Icon(
-                  _obscure ? Icons.visibility_off : Icons.visibility,
+                  _obscure ? sfIcon('eye.slash') : sfIcon('eye'),
                   size: 20,
                   color: c.textTertiary,
                 ),

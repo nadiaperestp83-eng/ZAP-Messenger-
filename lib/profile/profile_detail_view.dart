@@ -372,7 +372,7 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                Icons.arrow_back_ios_new,
+                sfIcon('chevron.left'),
                 size: 20,
                 color: Colors.white,
               ),
@@ -503,7 +503,11 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
             Row(
               children: [
                 if (_isOnline) ...[
-                  const Icon(Icons.circle, size: 7, color: Color(0xFF1AC81A)),
+                  Icon(
+                    sfIcon('circle.fill'),
+                    size: 7,
+                    color: const Color(0xFF1AC81A),
+                  ),
                   const SizedBox(width: 6),
                 ],
                 Text(

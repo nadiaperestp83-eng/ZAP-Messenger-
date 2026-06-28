@@ -375,7 +375,7 @@ class _ProfileViewState extends State<ProfileView> {
                   ),
                 ),
                 child: Icon(
-                  Icons.add_rounded,
+                  sfIcon('plus'),
                   size: 16,
                   color: Colors.white.withValues(alpha: 0.9),
                 ),

@@ -91,7 +91,7 @@ class AboutView extends StatelessWidget {
                         child: Divider(height: 1, color: c.divider),
                       ),
                       _AboutLinkRow(
-                        icon: Icons.code_rounded,
+                        icon: sfIcon('chevron.left.forwardslash.chevron.right'),
                         title: 'GitHub',
                         value: 'github.com/iebb/mithka',
                         onTap: () => openLink(context, _githubUrl),

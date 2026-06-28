@@ -196,7 +196,7 @@ class _PollComposerViewState extends State<PollComposerView> {
                 child: Padding(
                   padding: const EdgeInsets.only(left: 8),
                   child: Icon(
-                    Icons.remove_circle,
+                    sfIcon('minus.circle'),
                     size: 20,
                     color: AppTheme.tagRed.withValues(alpha: 0.8),
                   ),

@@ -166,7 +166,7 @@ class _ChatSearchViewState extends State<ChatSearchView> {
                             _onChanged('');
                           },
                           child: Icon(
-                            Icons.cancel,
+                            sfIcon('xmark'),
                             size: 16,
                             color: c.textTertiary,
                           ),

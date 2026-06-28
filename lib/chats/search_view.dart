@@ -134,7 +134,7 @@ class _SearchViewState extends State<SearchView> {
                             _vm.search('');
                           },
                           child: Icon(
-                            Icons.cancel,
+                            sfIcon('xmark'),
                             size: 16,
                             color: c.textTertiary,
                           ),

@@ -229,7 +229,7 @@ class _ProxyViewState extends State<ProxyView> {
                 child: Padding(
                   padding: const EdgeInsets.all(4),
                   child: Icon(
-                    Icons.remove_circle_outline,
+                    sfIcon('minus.circle'),
                     size: 20,
                     color: AppTheme.tagRed.withValues(alpha: 0.85),
                   ),

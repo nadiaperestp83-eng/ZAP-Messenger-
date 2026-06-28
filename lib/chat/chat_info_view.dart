@@ -302,7 +302,7 @@ class _ChatInfoViewState extends State<ChatInfoView> {
                 ),
               if (_vm.canInvite)
                 _actionTile(
-                  Icons.add,
+                  sfIcon('plus'),
                   '邀请',
                   () => Navigator.of(context).push(
                     MaterialPageRoute(
@@ -310,7 +310,7 @@ class _ChatInfoViewState extends State<ChatInfoView> {
                     ),
                   ),
                 ),
-              if (_vm.canRemove) _actionTile(Icons.remove, '移除', _openMembers),
+              if (_vm.canRemove) _actionTile(sfIcon('minus'), '移除', _openMembers),
             ],
           ),
         ],

@@ -138,7 +138,7 @@ class TranslationSettingsView extends StatelessWidget {
                             ),
                           ),
                           if (selected)
-                            Icon(Icons.check, size: 18, color: AppTheme.brand),
+                            Icon(sfIcon('checkmark'), size: 18, color: AppTheme.brand),
                         ],
                       ),
                     ),
@@ -331,7 +331,7 @@ class NoTranslateLanguagesView extends StatelessWidget {
                   style: TextStyle(fontSize: 16, color: c.textPrimary),
                 ),
               ),
-              if (selected) Icon(Icons.check, size: 18, color: AppTheme.brand),
+              if (selected) Icon(sfIcon('checkmark'), size: 18, color: AppTheme.brand),
             ],
           ),
         ),

@@ -197,7 +197,7 @@ class _AddMembersViewState extends State<AddMembersView> {
         child: Row(
           children: [
             Icon(
-              selected ? Icons.check_circle : Icons.radio_button_unchecked,
+              selected ? sfIcon('checkmark.circle') : sfIcon('circle'),
               size: 22,
               color: selected ? AppTheme.brand : c.textTertiary,
             ),

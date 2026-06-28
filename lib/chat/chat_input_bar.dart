@@ -344,7 +344,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
             const SizedBox(width: 8),
             GestureDetector(
               onTap: () => vm.setReply(null),
-              child: Icon(Icons.cancel, size: 18, color: c.textTertiary),
+              child: Icon(sfIcon('xmark'), size: 18, color: c.textTertiary),
             ),
           ],
         ),
@@ -550,7 +550,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
                   style: TextStyle(fontSize: 13, color: AppTheme.brand),
                 )
               else if (selected)
-                Icon(Icons.check, size: 18, color: AppTheme.brand),
+                Icon(sfIcon('checkmark'), size: 18, color: AppTheme.brand),
             ],
           ),
         ),
@@ -614,7 +614,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
                           ),
                           const SizedBox(width: 2),
                           Icon(
-                            Icons.keyboard_arrow_down_rounded,
+                            sfIcon('chevron.down'),
                             size: 16,
                             color: c.textTertiary,
                           ),

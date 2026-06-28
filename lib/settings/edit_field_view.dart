@@ -114,7 +114,7 @@ class _EditFieldViewState extends State<EditFieldView> {
                           child: Padding(
                             padding: const EdgeInsets.only(left: 8, top: 2),
                             child: Icon(
-                              Icons.cancel,
+                              sfIcon('xmark'),
                               size: 17,
                               color: c.textTertiary,
                             ),

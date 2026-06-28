@@ -416,7 +416,7 @@ class _ChatListViewState extends State<ChatListView> {
                       if (_meIsPremium && _meStatusId != 0) ...[
                         const SizedBox(width: AppSpacing.xs),
                         Icon(
-                          Icons.keyboard_arrow_down_rounded,
+                          sfIcon('chevron.down'),
                           size: 14,
                           color: c.textTertiary,
                         ),
@@ -475,7 +475,7 @@ class _ChatListViewState extends State<ChatListView> {
                   width: AppMetric.hitTarget,
                   height: AppMetric.hitTarget,
                   child: Icon(
-                    Icons.filter_list_rounded,
+                    sfIcon('line.3.horizontal.decrease'),
                     size: AppIconSize.toolbar,
                     color: c.textPrimary,
                   ),
@@ -894,8 +894,8 @@ class ChatFilterMenu extends StatelessWidget {
                     children: [
                       Icon(
                         filter.isAll
-                            ? Icons.all_inbox_rounded
-                            : Icons.folder_outlined,
+                            ? sfIcon('tray.full')
+                            : sfIcon('folder'),
                         size: AppIconSize.lg + 1,
                         color: c.textPrimary,
                       ),
@@ -912,7 +912,7 @@ class ChatFilterMenu extends StatelessWidget {
                         ),
                       ),
                       if (selectedFilter)
-                        Icon(Icons.check, size: 18, color: AppTheme.brand),
+                        Icon(sfIcon('checkmark'), size: 18, color: AppTheme.brand),
                     ],
                   ),
                 ),

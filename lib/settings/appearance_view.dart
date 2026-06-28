@@ -13,6 +13,7 @@ import '../components/ui_components.dart';
 import '../theme/app_theme.dart';
 import '../theme/theme_controller.dart';
 import 'edit_field_view.dart';
+import '../components/sf_symbols.dart';
 
 class AppearanceView extends StatelessWidget {
   const AppearanceView({super.key});
@@ -63,7 +64,7 @@ class AppearanceView extends StatelessWidget {
                         builder: (_) => const FontSettingsView(),
                       ),
                     ),
-                    icon: Icons.font_download_outlined,
+                    icon: sfIcon('textformat'),
                   ),
                 ]),
                 const SizedBox(height: AppSpacing.xl),
@@ -74,28 +75,28 @@ class AppearanceView extends StatelessWidget {
                 _card(context, [
                   _toggleRow(
                     context,
-                    Icons.groups_rounded,
+                    sfIcon('person.2'),
                     '群聊头像显示为圆形',
                     theme.circularGroupAvatars,
                     (v) => theme.circularGroupAvatars = v,
                   ),
                   _toggleRow(
                     context,
-                    Icons.badge_outlined,
+                    sfIcon('person.text.rectangle'),
                     '显示成员头衔',
                     theme.showMemberTags,
                     (v) => theme.showMemberTags = v,
                   ),
                   _toggleRow(
                     context,
-                    Icons.photo_library_outlined,
+                    sfIcon('photo.stack'),
                     '合并图片消息',
                     theme.groupImageMessages,
                     (v) => theme.groupImageMessages = v,
                   ),
                   _toggleRow(
                     context,
-                    Icons.visibility_off_outlined,
+                    sfIcon('eye.slash'),
                     '侧边栏隐藏手机号',
                     theme.hideSidebarPhone,
                     (v) => theme.hideSidebarPhone = v,
@@ -106,21 +107,21 @@ class AppearanceView extends StatelessWidget {
                 _card(context, [
                   _toggleRow(
                     context,
-                    Icons.palette_outlined,
+                    sfIcon('paintpalette'),
                     '显示 Premium 名字颜色',
                     theme.showChatPremiumNameColors,
                     (v) => theme.showChatPremiumNameColors = v,
                   ),
                   _toggleRow(
                     context,
-                    Icons.emoji_emotions_outlined,
+                    sfIcon('face.smiling'),
                     '显示 Premium 状态表情',
                     theme.showChatPremiumEmojiStatus,
                     (v) => theme.showChatPremiumEmojiStatus = v,
                   ),
                   _toggleRow(
                     context,
-                    Icons.edit_note_rounded,
+                    sfIcon('square.and.pencil'),
                     '显示编辑和已读标记',
                     theme.showMessageMetaIndicators,
                     (v) => theme.showMessageMetaIndicators = v,
@@ -131,28 +132,28 @@ class AppearanceView extends StatelessWidget {
                 _card(context, [
                   _toggleRow(
                     context,
-                    Icons.filter_list_rounded,
+                    sfIcon('line.3.horizontal.decrease'),
                     '顶部显示聊天分组筛选',
                     theme.showChatFolderFilter,
                     (v) => theme.showChatFolderFilter = v,
                   ),
                   _toggleRow(
                     context,
-                    Icons.search_rounded,
+                    sfIcon('magnifyingglass'),
                     '显示聊天列表搜索',
                     theme.showChatListSearch,
                     (v) => theme.showChatListSearch = v,
                   ),
                   _toggleRow(
                     context,
-                    Icons.palette_outlined,
+                    sfIcon('paintpalette'),
                     '显示 Premium 名字颜色',
                     theme.showPremiumNameColors,
                     (v) => theme.showPremiumNameColors = v,
                   ),
                   _toggleRow(
                     context,
-                    Icons.emoji_emotions_outlined,
+                    sfIcon('face.smiling'),
                     '显示 Premium 状态表情',
                     theme.showPremiumEmojiStatus,
                     (v) => theme.showPremiumEmojiStatus = v,
@@ -238,7 +239,7 @@ class AppearanceView extends StatelessWidget {
                   ],
                 ),
                 child: color.toARGB32() == selected
-                    ? const Icon(Icons.check, size: 18, color: Colors.white)
+                    ? Icon(sfIcon('checkmark'), size: 18, color: Colors.white)
                     : null,
               ),
             ),
@@ -259,7 +260,7 @@ class AppearanceView extends StatelessWidget {
         children: [
           _scaleSlider(
             context,
-            icon: Icons.text_fields_rounded,
+            icon: sfIcon('textformat'),
             title: '字体大小',
             value: theme.fontScale,
             min: ThemeController.minFontScale,
@@ -284,19 +285,19 @@ class AppearanceView extends StatelessWidget {
           const InsetDivider(leadingInset: 52),
           _scaleSlider(
             context,
-            icon: Icons.space_dashboard_outlined,
+            icon: sfIcon('square.grid.2x2'),
             title: '界面大小',
             value: theme.interfaceScale,
             min: ThemeController.minInterfaceScale,
             max: ThemeController.maxInterfaceScale,
             divisions: 17,
             leading: Icon(
-              Icons.crop_square,
+              sfIcon('square'),
               size: AppTextSize.body,
               color: c.textSecondary,
             ),
             trailing: Icon(
-              Icons.crop_square,
+              sfIcon('square'),
               size: AppIconSize.add,
               color: c.textPrimary,
             ),
@@ -436,7 +437,7 @@ class AppearanceView extends StatelessWidget {
               ),
               const Spacer(),
               if (selected)
-                Icon(Icons.check, size: AppIconSize.lg, color: AppTheme.brand),
+                Icon(sfIcon('checkmark'), size: AppIconSize.lg, color: AppTheme.brand),
             ],
           ),
         ),
@@ -522,7 +523,7 @@ class AppearanceView extends StatelessWidget {
               ),
               const SizedBox(width: AppSpacing.sm),
               Icon(
-                Icons.chevron_right_rounded,
+                sfIcon('chevron.right'),
                 size: AppIconSize.lg,
                 color: c.textTertiary,
               ),
@@ -753,7 +754,7 @@ class FontSettingsView extends StatelessWidget {
               ),
               const SizedBox(width: AppSpacing.sm),
               Icon(
-                Icons.chevron_right_rounded,
+                sfIcon('chevron.right'),
                 size: AppIconSize.lg,
                 color: c.textTertiary,
               ),
@@ -898,7 +899,7 @@ class FontPickerView extends StatelessWidget {
               ),
               const SizedBox(width: AppSpacing.md),
               if (selected)
-                Icon(Icons.check, size: AppIconSize.lg, color: AppTheme.brand),
+                Icon(sfIcon('checkmark'), size: AppIconSize.lg, color: AppTheme.brand),
             ],
           ),
         ),
@@ -1026,7 +1027,7 @@ class MonospaceFontPickerView extends StatelessWidget {
               ),
               const SizedBox(width: AppSpacing.md),
               if (selected)
-                Icon(Icons.check, size: AppIconSize.lg, color: AppTheme.brand),
+                Icon(sfIcon('checkmark'), size: AppIconSize.lg, color: AppTheme.brand),
             ],
           ),
         ),

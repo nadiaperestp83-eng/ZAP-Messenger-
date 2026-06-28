@@ -581,7 +581,7 @@ class _ImageEditViewState extends State<ImageEditView> {
         children: [
           IconButton(
             onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.close, color: Colors.white),
+            icon: Icon(sfIcon('xmark'), color: Colors.white),
           ),
           Text(
             widget.avatar ? '裁剪头像' : '编辑图片',
@@ -595,14 +595,14 @@ class _ImageEditViewState extends State<ImageEditView> {
           IconButton(
             tooltip: '重置裁剪',
             onPressed: _resetCrop,
-            icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+            icon: Icon(sfIcon('arrow.triangle.2.circlepath'), color: Colors.white),
           ),
           if (!widget.avatar)
             IconButton(
               tooltip: '旋转',
               onPressed: _saving ? null : _rotateRight,
               icon: Icon(
-                Icons.rotate_90_degrees_cw_rounded,
+                sfIcon('rotate.right'),
                 color: _saving ? Colors.white38 : Colors.white,
               ),
             ),
@@ -639,15 +639,15 @@ class _ImageEditViewState extends State<ImageEditView> {
               children: [
                 _toolButton(_EditTool.crop, sfIcon('crop'), '裁剪'),
                 if (!widget.avatar) ...[
-                  _toolButton(_EditTool.mask, Icons.blur_on_rounded, '遮挡'),
-                  _toolButton(_EditTool.draw, Icons.edit_rounded, '画笔'),
-                  _toolButton(_EditTool.text, Icons.text_fields_rounded, '文字'),
+                  _toolButton(_EditTool.mask, sfIcon('drop'), '遮挡'),
+                  _toolButton(_EditTool.draw, sfIcon('pencil'), '画笔'),
+                  _toolButton(_EditTool.text, sfIcon('textformat'), '文字'),
                 ],
                 const Spacer(),
                 IconButton(
                   onPressed: _strokes.isEmpty && _labels.isEmpty ? null : _undo,
                   icon: Icon(
-                    Icons.undo_rounded,
+                    sfIcon('arrow.counterclockwise'),
                     color: _strokes.isEmpty && _labels.isEmpty
                         ? Colors.white30
                         : Colors.white,
@@ -671,7 +671,7 @@ class _ImageEditViewState extends State<ImageEditView> {
       child: Row(
         children: [
           Icon(
-            isMask ? Icons.blur_on_rounded : Icons.edit_rounded,
+            isMask ? sfIcon('drop') : sfIcon('pencil'),
             size: 16,
             color: Colors.white70,
           ),

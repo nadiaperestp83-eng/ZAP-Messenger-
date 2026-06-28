@@ -8,19 +8,22 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_theme.dart';
 
 enum AppearanceMode {
-  system('跟随系统', Icons.contrast),
-  light('浅色', Icons.light_mode),
-  dark('深色', Icons.dark_mode);
+  system('跟随系统', FontAwesomeIcons.circleHalfStroke),
+  light('浅色', FontAwesomeIcons.solidSun),
+  dark('深色', FontAwesomeIcons.solidMoon);
 
-  const AppearanceMode(this.label, this.icon);
+  const AppearanceMode(this.label, this._icon);
   final String label;
-  final IconData icon;
+  final FaIconData _icon;
+
+  IconData get icon => _icon.data;
 
   ThemeMode get themeMode => switch (this) {
     AppearanceMode.system => ThemeMode.system,
@@ -30,21 +33,25 @@ enum AppearanceMode {
 }
 
 enum UnreadBadgeMode {
-  messages('未读消息数', Icons.mark_chat_unread),
-  chats('未读会话数', Icons.forum);
+  messages('未读消息数', FontAwesomeIcons.solidMessage),
+  chats('未读会话数', FontAwesomeIcons.comments);
 
-  const UnreadBadgeMode(this.label, this.icon);
+  const UnreadBadgeMode(this.label, this._icon);
   final String label;
-  final IconData icon;
+  final FaIconData _icon;
+
+  IconData get icon => _icon.data;
 }
 
 enum UnreadBadgeOverflowMode {
-  capped('超过 99 显示 99+', Icons.notifications_active_outlined),
-  exact('超过 99 显示实际数字', Icons.pin_outlined);
+  capped('超过 99 显示 99+', FontAwesomeIcons.solidBell),
+  exact('超过 99 显示实际数字', FontAwesomeIcons.thumbtack);
 
-  const UnreadBadgeOverflowMode(this.label, this.icon);
+  const UnreadBadgeOverflowMode(this.label, this._icon);
   final String label;
-  final IconData icon;
+  final FaIconData _icon;
+
+  IconData get icon => _icon.data;
 
   String format(int count) => switch (this) {
     UnreadBadgeOverflowMode.capped => count > 99 ? '99+' : '$count',

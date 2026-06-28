@@ -1953,7 +1953,7 @@ class _ChatViewState extends State<ChatView> {
               ),
             ),
             child: selected
-                ? const Icon(Icons.check, size: 17, color: Colors.white)
+                ? Icon(sfIcon('checkmark'), size: 17, color: Colors.white)
                 : null,
           ),
           const SizedBox(width: 8),
@@ -2468,8 +2468,7 @@ class _ChatViewState extends State<ChatView> {
                 color: Color(0xFF3A3A3C),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
-                Icons.keyboard_arrow_down,
+              child: Icon(sfIcon('chevron.down'),
                 size: 22,
                 color: Colors.white,
               ),
@@ -2562,8 +2561,7 @@ class _ChatViewState extends State<ChatView> {
         children: [
           _reactionTab2(
             'standard',
-            const Icon(
-              Icons.emoji_emotions_outlined,
+            Icon(sfIcon('face.smiling'),
               size: 22,
               color: Colors.white70,
             ),
@@ -2577,8 +2575,7 @@ class _ChatViewState extends State<ChatView> {
                       size: 26,
                       color: Colors.white,
                     )
-                  : const Icon(
-                      Icons.workspaces_outline,
+                  : Icon(sfIcon('person.2.square.stack'),
                       size: 20,
                       color: Colors.white70,
                     ),

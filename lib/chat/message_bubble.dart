@@ -534,11 +534,11 @@ class _MessageBubbleState extends State<MessageBubble>
             mainAxisSize: MainAxisSize.min,
             children: [
               if (message.isEdited)
-                Icon(Icons.edit_rounded, size: 13, color: faint),
+                Icon(sfIcon('pencil'), size: 13, color: faint),
               if (message.isEdited && outgoing) const SizedBox(width: 3),
               if (outgoing)
                 Icon(
-                  widget.isRead ? Icons.done_all : Icons.done,
+                  widget.isRead ? sfIcon('checkmark.double') : sfIcon('checkmark'),
                   size: 14,
                   color: widget.isRead ? Colors.white : faint,
                 ),
@@ -1006,8 +1006,7 @@ class _MessageBubbleState extends State<MessageBubble>
               color: const Color(0xFFFF3B30),
               borderRadius: BorderRadius.circular(4),
             ),
-            child: const Icon(
-              Icons.music_note_rounded,
+            child: Icon(sfIcon('music.note'),
               color: Colors.white,
               size: 14,
             ),
@@ -1090,7 +1089,7 @@ class _MessageBubbleState extends State<MessageBubble>
         : Container(
             color: AppTheme.brand.withValues(alpha: 0.12),
             alignment: Alignment.center,
-            child: Icon(Icons.album_rounded, size: 28, color: c.textSecondary),
+            child: Icon(sfIcon('music.note.list'), size: 28, color: c.textSecondary),
           );
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -1307,7 +1306,7 @@ class _MessageBubbleState extends State<MessageBubble>
             if (widget.message.isEdited && outgoing) const SizedBox(width: 4),
             if (outgoing)
               Icon(
-                widget.isRead ? Icons.done_all : Icons.done,
+                widget.isRead ? sfIcon('checkmark.double') : sfIcon('checkmark'),
                 size: 13,
                 color: widget.isRead ? Colors.white : faint,
               ),
@@ -2326,8 +2325,7 @@ class _MessageBubbleState extends State<MessageBubble>
                 shape: BoxShape.circle,
                 border: Border.all(color: c.card, width: 1.5),
               ),
-              child: const Icon(
-                Icons.arrow_downward,
+              child: Icon(sfIcon('arrow.down'),
                 size: 11,
                 color: Colors.white,
               ),
