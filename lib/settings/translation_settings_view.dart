@@ -13,9 +13,9 @@ import 'package:provider/provider.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../components/ui_components.dart';
 import '../theme/app_theme.dart';
-import 'edit_field_view.dart';
 import 'translation_api.dart';
 import 'translation_controller.dart';
+import 'package:mithka/l10n/app_localizations.dart';
 
 class TranslationSettingsView extends StatelessWidget {
   const TranslationSettingsView({super.key});
@@ -28,7 +28,10 @@ class TranslationSettingsView extends StatelessWidget {
       backgroundColor: c.groupedBackground,
       body: Column(
         children: [
-          NavHeader(title: '翻译', onBack: () => Navigator.of(context).pop()),
+          NavHeader(
+            title: AppStrings.t(AppStringKeys.messageActionTranslate),
+            onBack: () => Navigator.of(context).pop(),
+          ),
           Expanded(
             child: ListView(
               padding: const EdgeInsets.fromLTRB(12, 14, 12, 24),
@@ -37,7 +40,7 @@ class TranslationSettingsView extends StatelessWidget {
                   _switchRow(
                     context,
                     icon: FontAwesomeIcons.language.data,
-                    title: '消息翻译',
+                    title: AppStrings.t(AppStringKeys.translationSettingsTitle),
                     value: translation.enabled,
                     onChanged: (v) => translation.enabled = v,
                   ),
@@ -47,7 +50,9 @@ class TranslationSettingsView extends StatelessWidget {
                   _navRow(
                     context,
                     icon: FontAwesomeIcons.networkWired.data,
-                    title: '翻译服务',
+                    title: AppStrings.t(
+                      AppStringKeys.translationSettingsService,
+                    ),
                     trailing: translation.providerLabel,
                     onTap: () => _showProviderPicker(context),
                   ),
@@ -55,59 +60,11 @@ class TranslationSettingsView extends StatelessWidget {
                   _navRow(
                     context,
                     icon: FontAwesomeIcons.globe.data,
-                    title: '目标语言',
+                    title: AppStrings.t(
+                      AppStringKeys.translationSettingsTargetLanguage,
+                    ),
                     trailing: translation.targetLanguageLabel,
                     onTap: () => _showTargetPicker(context),
-                  ),
-                ]),
-                const SizedBox(height: 14),
-                _card(context, [
-                  _navRow(
-                    context,
-                    icon: FontAwesomeIcons.link.data,
-                    title: 'Lingva 地址',
-                    trailing: _endpointLabel(translation.lingvaEndpoint),
-                    onTap: () => _editEndpoint(
-                      context,
-                      title: 'Lingva 地址',
-                      initial: translation.lingvaEndpoint,
-                      hint: TranslationController.defaultLingvaEndpoint,
-                      onSaved: (value) => translation.lingvaEndpoint = value,
-                    ),
-                  ),
-                  const InsetDivider(leadingInset: 56),
-                  _navRow(
-                    context,
-                    icon: FontAwesomeIcons.link.data,
-                    title: 'LibreTranslate 地址',
-                    trailing: _endpointLabel(
-                      translation.libreTranslateEndpoint,
-                    ),
-                    onTap: () => _editEndpoint(
-                      context,
-                      title: 'LibreTranslate 地址',
-                      initial: translation.libreTranslateEndpoint,
-                      hint: 'https://libretranslate.example.com',
-                      onSaved: (value) =>
-                          translation.libreTranslateEndpoint = value,
-                    ),
-                  ),
-                  const InsetDivider(leadingInset: 56),
-                  _navRow(
-                    context,
-                    icon: FontAwesomeIcons.key.data,
-                    title: 'LibreTranslate API Key',
-                    trailing: translation.libreTranslateApiKey.isEmpty
-                        ? '未设置'
-                        : '已设置',
-                    onTap: () => _editEndpoint(
-                      context,
-                      title: 'LibreTranslate API Key',
-                      initial: translation.libreTranslateApiKey,
-                      hint: '可留空',
-                      onSaved: (value) =>
-                          translation.libreTranslateApiKey = value,
-                    ),
                   ),
                 ]),
               ],
@@ -173,7 +130,7 @@ class TranslationSettingsView extends StatelessWidget {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  provider.label,
+                                  provider.label.l10n(context),
                                   style: TextStyle(
                                     fontSize: 16,
                                     color: c.textPrimary,
@@ -199,32 +156,6 @@ class TranslationSettingsView extends StatelessWidget {
         );
       },
     );
-  }
-
-  Future<void> _editEndpoint(
-    BuildContext context, {
-    required String title,
-    required String initial,
-    required String hint,
-    required ValueChanged<String> onSaved,
-  }) async {
-    final value = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (_) => EditFieldView(
-          title: title,
-          initial: initial,
-          hint: hint,
-          keyboardType: TextInputType.url,
-        ),
-      ),
-    );
-    if (value == null) return;
-    onSaved(value);
-  }
-
-  String _endpointLabel(String endpoint) {
-    if (endpoint.trim().isEmpty) return '未设置';
-    return endpoint;
   }
 
   void _showTargetPicker(BuildContext context) {
@@ -270,7 +201,7 @@ class TranslationSettingsView extends StatelessWidget {
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              language.label,
+                              language.label.l10n(context),
                               style: TextStyle(
                                 fontSize: 16,
                                 color: c.textPrimary,
@@ -321,7 +252,10 @@ class TranslationSettingsView extends StatelessWidget {
           children: [
             _iconBadge(context, icon, const Color(0xFF34A2DF)),
             const SizedBox(width: 12),
-            Text(title, style: TextStyle(fontSize: 16, color: c.textPrimary)),
+            Text(
+              title.l10n(context),
+              style: TextStyle(fontSize: 16, color: c.textPrimary),
+            ),
             const Spacer(),
             CupertinoSwitch(
               value: value,
@@ -355,7 +289,7 @@ class TranslationSettingsView extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  title,
+                  title.l10n(context),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 16, color: c.textPrimary),
@@ -365,7 +299,7 @@ class TranslationSettingsView extends StatelessWidget {
               SizedBox(
                 width: math.min(MediaQuery.sizeOf(context).width * 0.42, 190),
                 child: Text(
-                  trailing,
+                  trailing.l10n(context),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.right,

@@ -6,6 +6,8 @@
 //  applied through providers at the app root.
 //
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -13,11 +15,17 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_theme.dart';
+import 'emoji_font_catalog.dart';
+import 'system_font_catalog.dart';
+import 'package:mithka/l10n/app_localizations.dart';
 
 enum AppearanceMode {
-  system('跟随系统', FontAwesomeIcons.circleHalfStroke),
-  light('浅色', FontAwesomeIcons.solidSun),
-  dark('深色', FontAwesomeIcons.solidMoon);
+  system(
+    AppStringKeys.appLocaleFollowSystem,
+    FontAwesomeIcons.circleHalfStroke,
+  ),
+  light(AppStringKeys.themeModeLight, FontAwesomeIcons.solidSun),
+  dark(AppStringKeys.themeModeDark, FontAwesomeIcons.solidMoon);
 
   const AppearanceMode(this.label, this._icon);
   final String label;
@@ -33,8 +41,11 @@ enum AppearanceMode {
 }
 
 enum UnreadBadgeMode {
-  messages('未读消息数', FontAwesomeIcons.solidMessage),
-  chats('未读会话数', FontAwesomeIcons.comments);
+  messages(
+    AppStringKeys.themeUnreadMessageCount,
+    FontAwesomeIcons.solidMessage,
+  ),
+  chats(AppStringKeys.themeUnreadChatCount, FontAwesomeIcons.comments);
 
   const UnreadBadgeMode(this.label, this._icon);
   final String label;
@@ -44,8 +55,8 @@ enum UnreadBadgeMode {
 }
 
 enum UnreadBadgeOverflowMode {
-  capped('超过 99 显示 99+', FontAwesomeIcons.solidBell),
-  exact('超过 99 显示实际数字', FontAwesomeIcons.thumbtack);
+  capped(AppStringKeys.themeUnreadCountCapAt99, FontAwesomeIcons.solidBell),
+  exact(AppStringKeys.themeUnreadCountShowActual, FontAwesomeIcons.thumbtack);
 
   const UnreadBadgeOverflowMode(this.label, this._icon);
   final String label;
@@ -60,9 +71,15 @@ enum UnreadBadgeOverflowMode {
 }
 
 enum GroupAssistantPlacement {
-  top('顶部折叠', FontAwesomeIcons.arrowUp),
-  chronological('按时间排序', FontAwesomeIcons.clock),
-  secondScreen('第二屏首位', FontAwesomeIcons.arrowDown);
+  top(AppStringKeys.themeGroupAssistantTopCollapsed, FontAwesomeIcons.arrowUp),
+  chronological(
+    AppStringKeys.themeGroupAssistantSortByTime,
+    FontAwesomeIcons.clock,
+  ),
+  secondScreen(
+    AppStringKeys.themeGroupAssistantSecondPageFirst,
+    FontAwesomeIcons.arrowDown,
+  );
 
   const GroupAssistantPlacement(this.label, this._icon);
   final String label;
@@ -71,57 +88,38 @@ enum GroupAssistantPlacement {
   IconData get icon => _icon.data;
 }
 
-enum EmojiFontChoice {
-  system('系统默认'),
-  notoColor('Noto Color Emoji'),
-  noto('Noto Emoji');
-
-  const EmojiFontChoice(this.label);
-
-  final String label;
-
-  String? get googleFamily {
-    return switch (this) {
-      EmojiFontChoice.system => null,
-      EmojiFontChoice.notoColor => 'Noto Color Emoji',
-      EmojiFontChoice.noto => 'Noto Emoji',
-    };
-  }
-
-  List<String> get fontFamilies {
-    final googleFamily = googleLoadedFamily;
-    if (googleFamily != null) return [googleFamily];
-    return switch (this) {
-      EmojiFontChoice.system => _platformEmojiFontFallback(),
-      EmojiFontChoice.notoColor => const ['NotoColorEmoji'],
-      EmojiFontChoice.noto => const ['NotoEmoji'],
-    };
-  }
-
-  String? get googleLoadedFamily {
-    final family = googleFamily;
-    if (family == null) return null;
-    final style = GoogleFonts.getFont(family, textStyle: const TextStyle());
-    return style.fontFamily;
-  }
-
-  static List<String> _platformEmojiFontFallback() {
-    return switch (defaultTargetPlatform) {
-      TargetPlatform.iOS || TargetPlatform.macOS => const ['Apple Color Emoji'],
-      TargetPlatform.android => const ['Noto Color Emoji'],
-      _ => const ['Noto Color Emoji', 'Apple Color Emoji'],
-    };
-  }
-}
-
 enum AppFontChoice {
-  system('系统默认', '消息预览 Aa 123', cjk: true),
-  apple('Apple / 苹方', '消息预览 Aa 123', cjk: true),
-  pingFang('苹方简体 [CN]', 'CN 简体 门 说 线 骨 令', cjk: true),
-  pingFangHk('苹方香港 [HK]', 'HK 繁體 門 說 綫 骨 令', cjk: true),
-  pingFangTw('苹方繁体 [TW]', 'TW 正體 門 說 線 骨 令', cjk: true),
-  hiraginoSansJp('Hiragino [JP]', 'JP 日本語 門 説 線 骨 令', cjk: true),
-  customCjk('Custom Font', '自定义汉字字体 门 門 戸', cjk: true),
+  system(
+    AppStringKeys.emojiFontCatalogSystemDefault,
+    AppStringKeys.themeMessagePreviewSample,
+    cjk: true,
+  ),
+  apple(
+    AppStringKeys.themeApplePingFangFamily,
+    AppStringKeys.themeMessagePreviewSample,
+    cjk: true,
+  ),
+  pingFang(
+    AppStringKeys.themePingFangSimplifiedChinese,
+    AppStringKeys.themeSimplifiedChinesePreview,
+    cjk: true,
+  ),
+  pingFangHk(
+    AppStringKeys.themePingFangHongKong,
+    AppStringKeys.themeTraditionalHongKongPreview,
+    cjk: true,
+  ),
+  pingFangTw(
+    AppStringKeys.themePingFangTraditionalChinese,
+    AppStringKeys.themeTraditionalTaiwanPreview,
+    cjk: true,
+  ),
+  hiraginoSansJp(
+    'Hiragino [JP]',
+    AppStringKeys.themeJapanesePreview,
+    cjk: true,
+  ),
+  customCjk('Custom Font', AppStringKeys.themeCustomHanFontPreview, cjk: true),
   helvetica('Helvetica Neue', 'Message preview Aa 123'),
   avenirNext('Avenir Next', 'Avenir Next Aa 123'),
   avenir('Avenir', 'Avenir Aa 123'),
@@ -135,14 +133,18 @@ enum AppFontChoice {
   gillSans('Gill Sans', 'Gill Sans Aa 123'),
   didot('Didot', 'Didot Aa 123'),
   americanTypewriter('American Typewriter', 'American Typewriter Aa 123'),
-  menlo('Menlo', 'Menlo Aa 123 代码'),
-  courierNew('Courier New', 'Courier New Aa 123 代码'),
+  menlo('Menlo', AppStringKeys.themeMenloCodePreview),
+  courierNew('Courier New', AppStringKeys.themeCourierNewCodePreview),
   custom('Custom Font', 'Custom Font Aa 123'),
   noteworthy('Noteworthy', 'Noteworthy Aa 123'),
   markerFelt('Marker Felt', 'Marker Felt Aa 123'),
   roboto('Roboto', 'Message preview Aa 123'),
-  notoSans('Noto Sans', '消息预览 Aa 123'),
-  notoSansCjk('Noto Sans CJK [CN]', 'CN/HK/TW/JP 门 門 戸 說 説', cjk: true),
+  notoSans('Noto Sans', AppStringKeys.themeMessagePreviewSample),
+  notoSansCjk(
+    'Noto Sans CJK [CN]',
+    AppStringKeys.themeCjkVariantPreview,
+    cjk: true,
+  ),
   googleInter('Inter', 'Inter Aa 123', googleFamily: 'Inter'),
   googleOpenSans('Open Sans', 'Open Sans Aa 123', googleFamily: 'Open Sans'),
   googleLato('Lato', 'Lato Aa 123', googleFamily: 'Lato'),
@@ -176,68 +178,72 @@ enum AppFontChoice {
   ),
   googleKleeOne(
     'Klee One [JP]',
-    'Klee One 日本語 門 説 線',
+    AppStringKeys.themeKleeOnePreview,
     googleFamily: 'Klee One',
     cjk: true,
   ),
   googleDotGothic16(
     'DotGothic16 [JP]',
-    'DotGothic16 日本語 門 説 線',
+    AppStringKeys.themeDotGothic16Preview,
     googleFamily: 'DotGothic16',
     cjk: true,
   ),
   googleStick(
     'Stick [JP]',
-    'Stick 日本語 門 説 線',
+    AppStringKeys.themeStickPreview,
     googleFamily: 'Stick',
     cjk: true,
   ),
   googleMPlus1p(
     'M PLUS 1p [JP]',
-    'M PLUS 1p 日本語 門 説 線',
+    AppStringKeys.themeMPlus1pPreview,
     googleFamily: 'M PLUS 1p',
     cjk: true,
   ),
-  lineSeedJp('LINE Seed JP [JP]', 'LINE Seed JP 日本語 門 説 線', cjk: true),
+  lineSeedJp(
+    'LINE Seed JP [JP]',
+    AppStringKeys.themeAa123JapanesePreview,
+    cjk: true,
+  ),
   googleChocolateClassicalSans(
     'Chocolate Classical Sans [TW]',
-    'Chocolate Classical Sans 門 說 線',
+    AppStringKeys.themeChocolateClassicalSansPreview,
     googleFamily: 'Chocolate Classical Sans',
     cjk: true,
   ),
   googleNotoSansSc(
     'Noto Sans SC [CN]',
-    'CN 简体 门 说 线 骨 令',
+    AppStringKeys.themeSimplifiedChinesePreview,
     googleFamily: 'Noto Sans SC',
     cjk: true,
   ),
   googleNotoSansHk(
     'Noto Sans HK [HK]',
-    'HK 繁體 門 說 綫 骨 令',
+    AppStringKeys.themeTraditionalHongKongPreview,
     googleFamily: 'Noto Sans HK',
     cjk: true,
   ),
   googleNotoSansTc(
     'Noto Sans TC [TW]',
-    'TW 正體 門 說 線 骨 令',
+    AppStringKeys.themeTraditionalTaiwanPreview,
     googleFamily: 'Noto Sans TC',
     cjk: true,
   ),
   googleNotoSansJp(
     'Noto Sans JP [JP]',
-    'JP 日本語 門 説 線 骨 令',
+    AppStringKeys.themeJapanesePreview,
     googleFamily: 'Noto Sans JP',
     cjk: true,
   ),
   googleLxgwWenKaiTc(
     'LXGW WenKai TC [TW]',
-    '霞鹜文楷 門 說 線',
+    AppStringKeys.themeLXGWWenKaiPreview,
     googleFamily: 'LXGW WenKai TC',
     cjk: true,
   ),
   googleZcoolXiaoWei(
     'ZCOOL XiaoWei [CN]',
-    '站酷小薇 门 說 線',
+    AppStringKeys.themeZcoolXiaoWeiPreview,
     googleFamily: 'ZCOOL XiaoWei',
     cjk: true,
   );
@@ -675,7 +681,7 @@ String displayStoredFontFamily(String value) =>
     decodeGoogleFontFamily(value) ?? value.trim();
 
 enum AppMonospaceFontChoice {
-  system('系统等宽', 'final count = 123;'),
+  system(AppStringKeys.themeSystemMonospace, 'final count = 123;'),
   sfMono('SF Mono', 'final count = 123;'),
   menlo('Menlo', 'final count = 123;'),
   monaco('Monaco', 'final count = 123;'),
@@ -810,13 +816,20 @@ class ThemeController extends ChangeNotifier {
     );
     _customMonospaceFontFamily =
         _prefs.getString(_customMonospaceFontFamilyKey)?.trim() ?? '';
-    _emojiFontChoice = EmojiFontChoice.values.firstWhere(
-      (m) => m.name == _prefs.getString(_emojiFontChoiceKey),
-      orElse: () => EmojiFontChoice.system,
+    final emojiFontKey = _normalizeEmojiFontKey(
+      _prefs.getString(_emojiFontChoiceKey),
+    );
+    _emojiFontChoice = EmojiFontChoice(
+      key: emojiFontKey,
+      label: emojiFontKey == EmojiFontChoice.system.key
+          ? EmojiFontChoice.system.label
+          : _prefs.getString(_emojiFontLabelKey) ?? emojiFontKey,
+      license: _prefs.getString(_emojiFontLicenseKey),
     );
     _fontFallbackChain = dedupeFontFamilies(
       _prefs.getStringList(_fontFallbackChainKey) ?? const <String>[],
     );
+    unawaited(_normalizeStoredPlatformFontFamilies());
     _fontScale = _prefs.getDouble(_fontKey) ?? 1.0;
     _interfaceScale = _prefs.getDouble(_interfaceScaleKey) ?? 1.0;
     _circularGroupAvatars = _prefs.getBool(_groupAvatarCircleKey) ?? true;
@@ -860,6 +873,8 @@ class ThemeController extends ChangeNotifier {
   static const _monospaceFontChoiceKey = 'monospaceFontChoice';
   static const _customMonospaceFontFamilyKey = 'customMonospaceFontFamily';
   static const _emojiFontChoiceKey = 'emojiFontChoice';
+  static const _emojiFontLabelKey = 'emojiFontLabel';
+  static const _emojiFontLicenseKey = 'emojiFontLicense';
   static const _fontFallbackChainKey = 'fontFallbackChain';
   static const _fontKey = 'fontScale';
   static const _interfaceScaleKey = 'interfaceScale';
@@ -932,17 +947,19 @@ class ThemeController extends ChangeNotifier {
   String get effectivePrimaryFontLabel =>
       _fontChoice.isCustom && _customPrimaryFontFamily.isNotEmpty
       ? _customPrimaryFontFamily
-      : _fontChoice.label;
+      : AppStrings.t(_fontChoice.label);
   String get effectiveCjkFontLabel =>
       _cjkFontChoice.isCustom && _customCjkFontFamily.isNotEmpty
       ? _customCjkFontFamily
-      : _cjkFontChoice.label;
+      : AppStrings.t(_cjkFontChoice.label);
   String get effectiveMonospaceFontLabel =>
       _monospaceFontChoice.isCustom && _customMonospaceFontFamily.isNotEmpty
       ? displayStoredFontFamily(_customMonospaceFontFamily)
-      : _monospaceFontChoice.label;
+      : AppStrings.t(_monospaceFontChoice.label);
   String get effectiveFontChainLabel {
-    if (_fontFallbackChain.isEmpty) return '未设置';
+    if (_fontFallbackChain.isEmpty) {
+      return AppStrings.t(AppStringKeys.groupManagementNotSet);
+    }
     if (_fontFallbackChain.length == 1) return _fontFallbackChain.first;
     final head = _fontFallbackChain.take(2).join(' / ');
     return _fontFallbackChain.length > 2
@@ -1117,16 +1134,110 @@ class ThemeController extends ChangeNotifier {
     notifyListeners();
   }
 
-  set emojiFontChoice(EmojiFontChoice value) {
-    _emojiFontChoice = value;
-    _prefs.setString(_emojiFontChoiceKey, value.name);
+  void useSystemEmojiFont() {
+    _emojiFontChoice = EmojiFontChoice.system;
+    _prefs.setString(_emojiFontChoiceKey, EmojiFontChoice.system.key);
+    _prefs.remove(_emojiFontLabelKey);
+    _prefs.remove(_emojiFontLicenseKey);
     notifyListeners();
+  }
+
+  Future<void> loadSelectedEmojiFontIfAvailable() async {
+    final key = _emojiFontChoice.key;
+    if (key == EmojiFontChoice.system.key) return;
+    final family = await EmojiFontCatalog.shared.loadCached(key);
+    if (family == null) return;
+    _emojiFontChoice = EmojiFontChoice(
+      key: key,
+      label: _emojiFontChoice.label,
+      license: _emojiFontChoice.license,
+      fontFamily: family,
+    );
+    notifyListeners();
+  }
+
+  Future<void> setEmojiFont(EmojiFontManifestEntry entry) async {
+    final family = await EmojiFontCatalog.shared.downloadAndLoad(entry);
+    _emojiFontChoice = EmojiFontChoice(
+      key: entry.key,
+      label: entry.label,
+      license: entry.license,
+      fontFamily: family,
+    );
+    _prefs.setString(_emojiFontChoiceKey, entry.key);
+    _prefs.setString(_emojiFontLabelKey, entry.label);
+    _prefs.setString(_emojiFontLicenseKey, entry.license);
+    notifyListeners();
+  }
+
+  static String _normalizeEmojiFontKey(String? value) {
+    return switch (value?.trim()) {
+      null || '' || 'system' => EmojiFontChoice.system.key,
+      'notoColor' => 'noto',
+      'noto' => 'noto-mono',
+      'blobmoji' => 'blobmoji',
+      'fluent' => 'fluent',
+      'fluentMono' => 'fluent-mono',
+      'fluentFlat' => 'fluent-flat',
+      'twemoji' => 'twemoji',
+      'openMoji' => 'openmoji',
+      'emojiTwo' => 'emojitwo',
+      'tossFace' => 'tossface',
+      final key => key,
+    };
   }
 
   void setFontFallbackChain(List<String> value) {
     _fontFallbackChain = dedupeFontFamilies(value);
     _prefs.setStringList(_fontFallbackChainKey, _fontFallbackChain);
     notifyListeners();
+  }
+
+  Future<void> _normalizeStoredPlatformFontFamilies() async {
+    if (defaultTargetPlatform != TargetPlatform.iOS &&
+        defaultTargetPlatform != TargetPlatform.macOS) {
+      return;
+    }
+    final beforePrimary = _customPrimaryFontFamily;
+    final beforeCjk = _customCjkFontFamily;
+    final beforeMono = _customMonospaceFontFamily;
+    final beforeChain = [..._fontFallbackChain];
+    final values = [beforePrimary, beforeCjk, beforeMono, ...beforeChain];
+    final normalized = await SystemFontCatalog.normalizeFamilies(values);
+    if (normalized.length != values.length) return;
+    if (_customPrimaryFontFamily != beforePrimary ||
+        _customCjkFontFamily != beforeCjk ||
+        _customMonospaceFontFamily != beforeMono ||
+        !listEquals(_fontFallbackChain, beforeChain)) {
+      return;
+    }
+
+    final nextPrimary = normalized[0];
+    final nextCjk = normalized[1];
+    final nextMono = normalized[2];
+    final nextChain = dedupeFontFamilies(normalized.skip(3));
+    var changed = false;
+    if (nextPrimary != _customPrimaryFontFamily) {
+      _customPrimaryFontFamily = nextPrimary;
+      _prefs.setString(_customPrimaryFontFamilyKey, nextPrimary);
+      changed = true;
+    }
+    if (nextCjk != _customCjkFontFamily) {
+      _customCjkFontFamily = nextCjk;
+      _prefs.setString(_customCjkFontFamilyKey, nextCjk);
+      changed = true;
+    }
+    if (nextMono != _customMonospaceFontFamily) {
+      _customMonospaceFontFamily = nextMono;
+      _prefs.setString(_customMonospaceFontFamilyKey, nextMono);
+      changed = true;
+    }
+    if (!listEquals(nextChain, _fontFallbackChain)) {
+      _fontFallbackChain = nextChain;
+      _prefs.setStringList(_fontFallbackChainKey, nextChain);
+      changed = true;
+    }
+    if (changed) notifyListeners();
   }
 
   void addFontToFallbackChain(String family) {
