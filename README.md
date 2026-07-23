@@ -1,6 +1,6 @@
 # Mithka
 
-A cross-platform (iOS + Android) Telegram client built with **Flutter** on top of
+A cross-platform (Android) Telegram client built with **Flutter** on top of
 **[TDLib](https://core.telegram.org/tdlib)** via FFI, with a dense,
 mobile-native messaging interface.
 
@@ -22,10 +22,7 @@ mobile-native messaging interface.
 
 ## Availability
 
-| Platform | Beta | Release |
-| --- | --- | --- |
-| Android | [Google Play Open testing](https://play.google.com/apps/testing/ad.neko.mithka) | [Google Play](https://play.google.com/store/apps/details?id=ad.neko.mithka) |
-| iOS | [TestFlight](https://testflight.apple.com/join/tVC8WkbW) | [App Store](https://apps.apple.com/us/app/mithka/id6783830742) |
+
 
 ## The name
 

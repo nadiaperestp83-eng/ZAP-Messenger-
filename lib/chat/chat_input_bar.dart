@@ -1199,10 +1199,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
               else if (_quickReplyContextVisible && _quickReplies.isNotEmpty)
                 _quickReplyContextMenu(),
               _inputRow(replyKeyboard),
-              if (replyKeyboardPanelVisible)
-                _replyKeyboardPanel(replyKeyboard)
-              else
-                _iconStrip(),
+              if (replyKeyboardPanelVisible) _replyKeyboardPanel(replyKeyboard),
               if (_panel == _Panel.function) _functionPanel(),
               if (_panel == _Panel.emoji) _emojiPanel(),
               if (_panel == _Panel.sticker) _stickerPanel(),
@@ -2454,15 +2451,27 @@ class _ChatInputBarState extends State<ChatInputBar> {
                 ),
               ),
             ),
+          ] else ...[
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _toggle(_Panel.function),
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8, bottom: 5),
+                child: AppIcon(
+                  _panel == _Panel.function
+                      ? HeroAppIcons.xmark
+                      : HeroAppIcons.circlePlus,
+                  size: 26,
+                  color: c.textSecondary,
+                ),
+              ),
+            ),
           ],
           Expanded(
             child: Container(
               decoration: BoxDecoration(
                 color: c.searchFill,
-                borderRadius: BorderRadius.circular(4),
-                border: Border(
-                  top: BorderSide(color: c.divider, width: 0.5),
-                ),
+                borderRadius: BorderRadius.circular(18),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
               child: Row(
@@ -2599,6 +2608,25 @@ class _ChatInputBarState extends State<ChatInputBar> {
                       ),
                     ),
                   ),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      _toggle(_Panel.emoji);
+                      if (_panel == _Panel.emoji) {
+                        EmojiStore.shared.loadIfNeeded();
+                      }
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 6),
+                      child: AppIcon(
+                        HeroAppIcons.solidFaceSmile,
+                        size: 22,
+                        color: _panel == _Panel.emoji
+                            ? AppTheme.brand
+                            : c.textTertiary,
+                      ),
+                    ),
+                  ),
                   if (!hasText && replyKeyboard != null)
                     Semantics(
                       button: true,
@@ -2624,6 +2652,27 @@ class _ChatInputBarState extends State<ChatInputBar> {
                       ),
                     ),
                 ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              _toggle(_Panel.sticker);
+              if (_panel == _Panel.sticker) {
+                StickerStore.shared.loadIfNeeded();
+                GifStore.shared.loadIfNeeded();
+              }
+            },
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: AppIcon(
+                HeroAppIcons.grip,
+                size: 24,
+                color: _panel == _Panel.sticker
+                    ? AppTheme.brand
+                    : c.textSecondary,
               ),
             ),
           ),
@@ -2709,6 +2758,31 @@ class _ChatInputBarState extends State<ChatInputBar> {
                   ),
                 ),
               ],
+            ),
+          ] else ...[
+            const SizedBox(width: 8),
+            GestureDetector(
+              key: const ValueKey('composerMicButton'),
+              behavior: HitTestBehavior.opaque,
+              onTap: _toggleVoice,
+              child: Container(
+                width: 36,
+                height: 36,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: _panel == _Panel.voice
+                      ? AppTheme.brand
+                      : c.searchFill,
+                  shape: BoxShape.circle,
+                ),
+                child: AppIcon(
+                  HeroAppIcons.microphone,
+                  size: 18,
+                  color: _panel == _Panel.voice
+                      ? Colors.white
+                      : c.textSecondary,
+                ),
+              ),
             ),
           ],
         ],
@@ -3776,6 +3850,16 @@ class _ChatInputBarState extends State<ChatInputBar> {
 
   Widget _functionPanel() {
     final items = [
+      (
+        HeroAppIcons.image.data,
+        AppStrings.t(AppStringKeys.composerImage),
+        _pickPhotos,
+      ),
+      (
+        HeroAppIcons.camera.data,
+        AppStrings.t(AppStringKeys.composerCamera),
+        _takePhoto,
+      ),
       (
         HeroAppIcons.phone.data,
         AppStrings.t(

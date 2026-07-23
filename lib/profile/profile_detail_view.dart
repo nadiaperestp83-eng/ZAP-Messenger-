@@ -7,6 +7,7 @@
 //
 
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -20,11 +21,13 @@ import 'package:provider/provider.dart';
 import '../app/app_navigator.dart';
 import '../call/call_manager.dart';
 import '../chat/audio_search_view.dart';
+import '../chat/chat_picker_view.dart';
 import '../chat/chat_search_view.dart';
 import '../chat/chat_view.dart';
 import '../chat/chat_wallpaper.dart';
 import '../chat/custom_emoji.dart';
 import '../chat/full_image_viewer.dart';
+import '../chat/image_edit_view.dart';
 import '../chat/secret_chat_service.dart';
 import '../chat/sticker_item.dart';
 import '../chat/sticker_preview.dart';
@@ -38,9 +41,11 @@ import '../components/toast.dart';
 import '../components/ui_components.dart';
 import '../components/vip_badge.dart';
 import '../l10n/telegram_language_controller.dart';
+import '../media/app_asset_picker.dart';
 import '../moments/story_management_view.dart';
 import '../moments/story_viewer_view.dart';
 import '../settings/blocked_user_service.dart';
+import '../settings/edit_field_view.dart';
 import '../settings/edit_profile_view.dart';
 import '../tdlib/json_helpers.dart';
 import '../tdlib/td_client.dart';
@@ -91,6 +96,7 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
   final VoicePlayer _musicPlayer = VoicePlayer();
   bool _musicPressed = false;
   bool _hideIdentity = false;
+  bool _muted = false;
   bool _isMe = false;
   bool _isContact = true;
   bool _isBlocked = false;
@@ -253,6 +259,26 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
   void _call(bool isVideo) =>
       context.read<CallManager>().startCall(widget.userId, isVideo);
 
+  Future<void> _toggleMute() async {
+    final cid = _chatId;
+    if (cid == null) return;
+    final next = !_muted;
+    setState(() => _muted = next);
+    try {
+      await TdClient.shared.query({
+        '@type': 'setChatNotificationSettings',
+        'chat_id': cid,
+        'notification_settings': {
+          '@type': 'chatNotificationSettings',
+          'use_default_mute_for': false,
+          'mute_for': next ? 2147483647 : 0,
+        },
+      });
+    } catch (_) {
+      if (mounted) setState(() => _muted = !next);
+    }
+  }
+
   Future<void> _addToContacts() async {
     final fallbackName = _name.trim().isNotEmpty ? _name.trim() : widget.name;
     final firstName = _firstName.trim().isNotEmpty
@@ -384,32 +410,242 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
   }
 
   Future<void> _showProfileContextMenu() async {
-    final action = await showModalBottomSheet<_ProfileContextAction>(
+    await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _ProfileContextMenu(
-        showBlock: !_isMe && !_isBlocked,
-        manageLabel: _isMe
-            ? context.l10n.t(AppStringKeys.profileToolsTitle)
-            : 'Contact tools',
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => _ProfileActionsSheet(
+        isMe: _isMe,
+        isContact: _isContact,
+        canBlock: !_isMe && !_isBlocked,
+        onAddOrEditContact: () {
+          Navigator.of(sheetContext).pop();
+          unawaited(_editContact());
+        },
+        onPrivateNote: () {
+          Navigator.of(sheetContext).pop();
+          unawaited(_editNote());
+        },
+        onCopyLink: () {
+          Navigator.of(sheetContext).pop();
+          _copyProfileLink();
+        },
+        onShareContact: () {
+          Navigator.of(sheetContext).pop();
+          unawaited(_shareContact());
+        },
+        onSuggestPhoto: () {
+          Navigator.of(sheetContext).pop();
+          unawaited(_suggestPhoto());
+        },
+        onSuggestBirthdate: () {
+          Navigator.of(sheetContext).pop();
+          unawaited(_suggestBirthdate());
+        },
+        onBlockUser: () {
+          Navigator.of(sheetContext).pop();
+          unawaited(_blockUser());
+        },
+        onRemoveContact: !_isMe && _isContact
+            ? () {
+                Navigator.of(sheetContext).pop();
+                unawaited(_removeContact());
+              }
+            : null,
       ),
     );
-    if (!mounted || action == null) return;
-    switch (action) {
-      case _ProfileContextAction.manage:
-        await Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => ProfileContactManagementView(
-              userId: widget.userId,
-              initialName: _name,
-            ),
+  }
+
+  /// Adds this person as a contact, or edits their saved name/phone if
+  /// already a contact. Reuses the dialog originally built for the standalone
+  /// Contact tools screen (now folded into this bottom sheet).
+  Future<void> _editContact() async {
+    final result = await showGeneralDialog<ContactEditResult>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Cancel',
+      barrierColor: Colors.black.withValues(alpha: 0.52),
+      transitionDuration: const Duration(milliseconds: 160),
+      transitionBuilder: (_, animation, _, child) => FadeTransition(
+        opacity: animation,
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.96, end: 1).animate(animation),
+          child: child,
+        ),
+      ),
+      pageBuilder: (context, _, _) => ContactEditDialog(
+        firstName: _firstName,
+        lastName: _lastName,
+        phoneNumber: _rawPhone,
+        showSharePhone: !_isContact,
+        privacyExceptionNeeded: false,
+      ),
+    );
+    if (result == null || result.firstName.trim().isEmpty || !mounted) return;
+    try {
+      await const ProfileContactService().addOrEdit(
+        userId: widget.userId,
+        phoneNumber: result.phoneNumber,
+        firstName: result.firstName,
+        lastName: result.lastName,
+        sharePhoneNumber: result.sharePhoneNumber,
+      );
+      final wasContact = _isContact;
+      if (!mounted) return;
+      setState(() {
+        _firstName = result.firstName.trim();
+        _lastName = result.lastName.trim();
+        _name = '$_firstName $_lastName'.trim();
+        _isContact = true;
+      });
+      showToast(context, wasContact ? 'Contact updated' : 'Contact added');
+    } catch (_) {
+      if (mounted) showToast(context, 'Failed to save contact');
+    }
+  }
+
+  Future<void> _removeContact() async {
+    final confirmed = await confirmDialog(
+      context,
+      title: AppStrings.t(AppStringKeys.profileContactManagementRemoveContact),
+      message: 'This person will be removed from your contact list.',
+      confirmText: AppStrings.t(AppStringKeys.chatInfoRemove),
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+    try {
+      await const ProfileContactService().remove(widget.userId);
+      if (!mounted) return;
+      setState(() => _isContact = false);
+      showToast(context, 'Contact removed');
+    } catch (_) {
+      if (mounted) showToast(context, 'Failed to remove contact');
+    }
+  }
+
+  Future<void> _editNote() async {
+    var initial = '';
+    try {
+      final full = await TdClient.shared.query({
+        '@type': 'getUserFullInfo',
+        'user_id': widget.userId,
+      });
+      initial = ProfileContactSnapshot.fromFullInfo(full).note;
+    } catch (_) {}
+    if (!mounted) return;
+    final value = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => EditFieldView(
+          title: AppStrings.t(
+            AppStringKeys.profileContactManagementContactNote,
           ),
-        );
-        if (mounted) await _load();
-      case _ProfileContextAction.copyLink:
-        _copyProfileLink();
-      case _ProfileContextAction.blockUser:
-        await _blockUser();
+          initial: initial,
+          hint: 'Only you can see this note',
+          multiline: true,
+          maxLength: 256,
+        ),
+      ),
+    );
+    if (value == null || !mounted) return;
+    try {
+      await const ProfileContactService().setNote(widget.userId, value);
+      if (mounted) {
+        showToast(context, value.trim().isEmpty ? 'Note removed' : 'Note saved');
+      }
+    } catch (_) {
+      if (mounted) showToast(context, 'Failed to save note');
+    }
+  }
+
+  Future<String?> _pickImage() async {
+    final selection = await AppAssetPicker.pickDetailed(
+      context,
+      type: AppAssetPickerType.image,
+      maxAssets: 1,
+    );
+    if (selection.assets.isEmpty || !mounted) return null;
+    final edited = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => ImageEditView(
+          sourcePath: selection.assets.first.file.path,
+          avatar: true,
+        ),
+      ),
+    );
+    if (edited == null) return null;
+    final file = File(edited);
+    return await file.exists() && await file.length() > 0 ? edited : null;
+  }
+
+  Future<void> _suggestPhoto() async {
+    final path = await _pickImage();
+    if (path == null || !mounted) return;
+    try {
+      await const ProfileContactService().suggestPhoto(widget.userId, path);
+      if (mounted) showToast(context, 'Photo suggestion sent');
+    } catch (_) {
+      if (mounted) showToast(context, 'Failed to send suggestion');
+    }
+  }
+
+  Future<void> _suggestBirthdate() async {
+    final value = await showGeneralDialog<SuggestedBirthdate>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Cancel',
+      barrierColor: Colors.black.withValues(alpha: 0.52),
+      transitionDuration: const Duration(milliseconds: 160),
+      transitionBuilder: (_, animation, _, child) => FadeTransition(
+        opacity: animation,
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.96, end: 1).animate(animation),
+          child: child,
+        ),
+      ),
+      pageBuilder: (_, _, _) => const BirthdateDialog(),
+    );
+    if (value == null || !mounted) return;
+    try {
+      await const ProfileContactService().suggestBirthdate(
+        widget.userId,
+        day: value.day,
+        month: value.month,
+        year: value.year,
+      );
+      if (mounted) showToast(context, 'Birthdate suggestion sent');
+    } catch (_) {
+      if (mounted) showToast(context, 'Failed to send suggestion');
+    }
+  }
+
+  Future<void> _shareContact() async {
+    final chat = await Navigator.of(context).push<ChatSummary>(
+      MaterialPageRoute(
+        builder: (_) => ChatPickerView(title: 'Share contact'),
+      ),
+    );
+    if (chat == null || !mounted) return;
+    try {
+      await TdClient.shared.query({
+        '@type': 'sendMessage',
+        'chat_id': chat.id,
+        'input_message_content': {
+          '@type': 'inputMessageContact',
+          'contact': {
+            '@type': 'contact',
+            'phone_number': _rawPhone,
+            'first_name': _firstName.isNotEmpty ? _firstName : _name,
+            'last_name': _lastName,
+            'user_id': widget.userId,
+          },
+        },
+      });
+      if (mounted) showToast(context, 'Contact shared');
+    } catch (_) {
+      if (mounted) showToast(context, 'Failed to share contact');
     }
   }
 
@@ -560,7 +796,6 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
                 ],
               ),
             ),
-            _bottomBar(),
           ],
         ),
       ),
@@ -785,13 +1020,10 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
 
   Widget _identityPanel(String status) {
     final c = context.colors;
-    final idText = (_username?.isNotEmpty ?? false)
-        ? 'ID: $_username'
-        : (widget.userId > 0 ? 'ID: ${widget.userId}' : '');
-    final identityLines = [
-      if (_phone.isNotEmpty && !_hideIdentity) _phone,
-      if (idText.isNotEmpty) idText,
-    ];
+    final usernameText = (_username?.isNotEmpty ?? false)
+        ? '@$_username'
+        : '';
+    final phoneLines = [if (_phone.isNotEmpty && !_hideIdentity) _phone];
     return Container(
       transform: Matrix4.translationValues(0, -34, 0),
       decoration: BoxDecoration(
@@ -835,8 +1067,21 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _nameLine(),
-                      if (identityLines.isNotEmpty) ...[
-                        const SizedBox(height: 7),
+                      if (usernameText.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          usernameText,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: AppTheme.brand,
+                          ),
+                        ),
+                      ],
+                      if (phoneLines.isNotEmpty) ...[
+                        const SizedBox(height: 4),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -844,7 +1089,7 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  for (final line in identityLines)
+                                  for (final line in phoneLines)
                                     Text(
                                       line,
                                       maxLines: 1,
@@ -903,6 +1148,7 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
               ],
             ),
           ],
+          if (!_isMe) ...[const SizedBox(height: 18), _actionRow()],
           if (_bio.isNotEmpty) ...[
             const SizedBox(height: 20),
             Row(
@@ -1303,78 +1549,91 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
     );
   }
 
-  Widget _bottomBar() {
+  /// Minimalist 4-button action row shown right under name/username,
+  /// replacing the old pinned bottom bar.
+  Widget _actionRow() {
     final c = context.colors;
-    return Container(
-      decoration: BoxDecoration(
-        color: c.navBar,
-        border: Border(top: BorderSide(color: c.divider, width: 0.5)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: _barButton(
-                  AppStrings.t(
-                    _isContact
-                        ? AppStringKeys.profileDetailAudioVideoCall
-                        : AppStringKeys.profileDetailAddFriend,
-                  ),
-                  primary: false,
-                  onTap: _isContact
-                      ? _callMenu
-                      : () => unawaited(_addToContacts()),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _barButton(
-                  AppStrings.t(AppStringKeys.profileDetailSendMessage),
-                  primary: true,
-                  onTap: _openChat,
-                  onLongPress: _hasLoadedUser && !_isMe && !_isBot
-                      ? _startSecretChat
-                      : null,
-                ),
-              ),
-            ],
+    return Row(
+      children: [
+        Expanded(
+          child: _actionButton(
+            icon: HeroAppIcons.message.data,
+            label: AppStrings.t(AppStringKeys.profileDetailSendMessage),
+            onTap: _openChat,
+            onLongPress: _hasLoadedUser && !_isMe && !_isBot
+                ? () => unawaited(_startSecretChat())
+                : null,
           ),
         ),
-      ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _actionButton(
+            icon: _muted
+                ? HeroAppIcons.bellSlash.data
+                : HeroAppIcons.bell.data,
+            label: AppStrings.t(
+              _muted ? AppStringKeys.chatUnmute : AppStringKeys.callMute,
+            ),
+            active: _muted,
+            onTap: () => unawaited(_toggleMute()),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _actionButton(
+            icon: HeroAppIcons.phone.data,
+            label: AppStrings.t(AppStringKeys.composerVoiceCall),
+            onTap: () => _call(false),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _actionButton(
+            icon: HeroAppIcons.video.data,
+            label: AppStrings.t(AppStringKeys.composerVideoCall),
+            onTap: () => _call(true),
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _barButton(
-    String label, {
-    required bool primary,
+  Widget _actionButton({
+    required IconData icon,
+    required String label,
     required VoidCallback onTap,
     VoidCallback? onLongPress,
+    bool active = false,
   }) {
+    final c = context.colors;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       onLongPress: onLongPress,
       child: Container(
-        height: 44,
-        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: primary
-              ? AppTheme.brand
-              : AppTheme.brand.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(10),
+          color: active
+              ? AppTheme.brand.withValues(alpha: 0.12)
+              : c.groupedBackground,
+          borderRadius: BorderRadius.circular(14),
         ),
-        child: Row(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            Icon(
+              icon,
+              size: 22,
+              color: active ? AppTheme.brand : c.textPrimary,
+            ),
+            const SizedBox(height: 4),
             Text(
               label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: primary ? AppTheme.onBrand : AppTheme.brand,
+                fontSize: 12,
+                color: active ? AppTheme.brand : c.textPrimary,
               ),
             ),
           ],
@@ -1625,36 +1884,30 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
   Widget _infoCard() {
     final c = context.colors;
     final rows = _infoRows;
-    return Container(
-      decoration: BoxDecoration(
-        color: c.card,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      clipBehavior: Clip.antiAlias,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           for (var i = 0; i < rows.length; i++) ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    rows[i].$1,
-                    style: TextStyle(fontSize: 16, color: c.textPrimary),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Text(
-                      rows[i].$2,
-                      textAlign: TextAlign.right,
-                      style: TextStyle(fontSize: 15, color: c.textSecondary),
-                    ),
-                  ),
-                ],
+            if (i > 0) const SizedBox(height: 16),
+            Text(
+              rows[i].$1,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: c.textTertiary,
               ),
             ),
-            if (i < rows.length - 1) const InsetDivider(leadingInset: 16),
+            const SizedBox(height: 3),
+            Text(
+              rows[i].$2,
+              style: TextStyle(
+                fontSize: 15,
+                height: 1.4,
+                color: c.textPrimary,
+              ),
+            ),
           ],
         ],
       ),
@@ -1774,67 +2027,123 @@ class _FeaturedPhotoMenu extends StatelessWidget {
   );
 }
 
-enum _ProfileContextAction { manage, copyLink, blockUser }
-
-class _ProfileContextMenu extends StatelessWidget {
-  const _ProfileContextMenu({
-    required this.showBlock,
-    required this.manageLabel,
+/// Unified profile actions sheet — replaces the old separate "Contact tools"
+/// full-screen route. Modern rounded bottom sheet, subtle drag handle, no
+/// heavy dividers, and a soft (not saturated-red) tone for critical actions.
+class _ProfileActionsSheet extends StatelessWidget {
+  const _ProfileActionsSheet({
+    required this.isMe,
+    required this.isContact,
+    required this.canBlock,
+    required this.onAddOrEditContact,
+    required this.onPrivateNote,
+    required this.onCopyLink,
+    required this.onShareContact,
+    required this.onSuggestPhoto,
+    required this.onSuggestBirthdate,
+    required this.onBlockUser,
+    required this.onRemoveContact,
   });
 
-  final bool showBlock;
-  final String manageLabel;
+  final bool isMe;
+  final bool isContact;
+  final bool canBlock;
+  final VoidCallback onAddOrEditContact;
+  final VoidCallback onPrivateNote;
+  final VoidCallback onCopyLink;
+  final VoidCallback onShareContact;
+  final VoidCallback onSuggestPhoto;
+  final VoidCallback onSuggestBirthdate;
+  final VoidCallback onBlockUser;
+  final VoidCallback? onRemoveContact;
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final hasCriticalSection = canBlock || onRemoveContact != null;
     return SafeArea(
       top: false,
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-        decoration: BoxDecoration(
-          color: c.card,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.16),
-              blurRadius: 18,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _item(
-              context,
-              key: const ValueKey('profile-context-manage'),
-              icon: HeroAppIcons.penToSquare,
-              label: manageLabel,
-              onTap: () =>
-                  Navigator.of(context).pop(_ProfileContextAction.manage),
-            ),
-            const InsetDivider(leadingInset: 56),
-            _item(
-              context,
-              key: const ValueKey('profile-context-copy-link'),
-              icon: HeroAppIcons.link,
-              label: AppStrings.t(AppStringKeys.profileDetailCopyLink),
-              onTap: () =>
-                  Navigator.of(context).pop(_ProfileContextAction.copyLink),
-            ),
-            if (showBlock) ...[
-              const InsetDivider(leadingInset: 56),
-              _item(
-                context,
-                key: const ValueKey('profile-context-block-user'),
-                icon: HeroAppIcons.shieldHalved,
-                label: AppStrings.t(AppStringKeys.chatBlockUserConfirm),
-                destructive: true,
-                onTap: () =>
-                    Navigator.of(context).pop(_ProfileContextAction.blockUser),
+            Container(
+              width: 36,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: c.divider,
+                borderRadius: BorderRadius.circular(2),
               ),
+            ),
+            if (!isMe) ...[
+              _sheetItem(
+                context,
+                icon: isContact ? HeroAppIcons.penToSquare : HeroAppIcons.userPlus,
+                label: isContact ? 'Edit contact' : 'Add contact',
+                onTap: onAddOrEditContact,
+              ),
+              _sheetItem(
+                context,
+                icon: HeroAppIcons.font,
+                label: 'Private note',
+                onTap: onPrivateNote,
+              ),
+              _sheetItem(
+                context,
+                icon: HeroAppIcons.link,
+                label: AppStrings.t(AppStringKeys.profileDetailCopyLink),
+                onTap: onCopyLink,
+              ),
+              _sheetItem(
+                context,
+                icon: HeroAppIcons.share,
+                label: 'Share contact',
+                onTap: onShareContact,
+              ),
+              const SizedBox(height: 6),
+              _sheetItem(
+                context,
+                icon: HeroAppIcons.image,
+                label: 'Suggest photo',
+                onTap: onSuggestPhoto,
+              ),
+              _sheetItem(
+                context,
+                icon: HeroAppIcons.clock,
+                label: 'Suggest birthdate',
+                onTap: onSuggestBirthdate,
+              ),
+            ] else ...[
+              _sheetItem(
+                context,
+                icon: HeroAppIcons.link,
+                label: AppStrings.t(AppStringKeys.profileDetailCopyLink),
+                onTap: onCopyLink,
+              ),
+            ],
+            if (hasCriticalSection) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Divider(height: 1, thickness: 1, color: c.divider),
+              ),
+              if (canBlock)
+                _sheetItem(
+                  context,
+                  icon: HeroAppIcons.shieldHalved,
+                  label: AppStrings.t(AppStringKeys.chatBlockUserConfirm),
+                  tone: _SheetItemTone.alert,
+                  onTap: onBlockUser,
+                ),
+              if (onRemoveContact != null)
+                _sheetItem(
+                  context,
+                  icon: HeroAppIcons.trash,
+                  label: 'Remove contact',
+                  tone: _SheetItemTone.alert,
+                  onTap: onRemoveContact!,
+                ),
             ],
           ],
         ),
@@ -1842,27 +2151,28 @@ class _ProfileContextMenu extends StatelessWidget {
     );
   }
 
-  Widget _item(
+  Widget _sheetItem(
     BuildContext context, {
-    required Key key,
     required AppIconData icon,
     required String label,
     required VoidCallback onTap,
-    bool destructive = false,
+    _SheetItemTone tone = _SheetItemTone.normal,
   }) {
     final c = context.colors;
-    final color = destructive ? const Color(0xFFFF4D4F) : c.textPrimary;
+    // Soft amber-leaning tone for critical actions instead of a saturated red.
+    final color = tone == _SheetItemTone.alert
+        ? const Color(0xFFB5651D)
+        : c.textPrimary;
     return GestureDetector(
-      key: key,
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: SizedBox(
-        height: 56,
+        height: 52,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
-              AppIcon(icon, size: 21, color: color),
+              AppIcon(icon, size: 20, color: color),
               const SizedBox(width: 16),
               Text(
                 label,
@@ -1879,3 +2189,5 @@ class _ProfileContextMenu extends StatelessWidget {
     );
   }
 }
+
+enum _SheetItemTone { normal, alert }

@@ -214,13 +214,15 @@ abstract final class AppMetric {
 /// Constants that read well on both light and dark, so they stay fixed.
 abstract final class AppTheme {
   // MARK: Brand (mutable — driven by the user's chosen theme color via
-  // [applyBrand]; defaults to azure).
-  static const int defaultBrand = 0x0099FF;
+  // [applyBrand]; defaults to a LINE-style soft green/teal instead of the
+  // stock Telegram azure. URL links keep their own separate blue — see
+  // [AppColors.linkBlue] — so this change never touches link color.
+  static const int defaultBrand = 0x06C755;
   static Color brand = _hex(defaultBrand);
   static Color onBrand = const Color(0xFFFFFFFF);
-  static Color brandDeep = _hex(0x0A84E0);
+  static Color brandDeep = _hex(0x05A648);
   static LinearGradient brandGradient = LinearGradient(
-    colors: [_hex(0x33ADFF), _hex(0x0099FF)],
+    colors: [_hex(0x3DDB88), _hex(0x06C755)],
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
   );
@@ -342,6 +344,8 @@ class AppColors extends ThemeExtension<AppColors> {
     textSecondary: _hex(0x8A8A8F),
     textTertiary: _hex(0xB0B3B8),
     divider: _hex(0xECECEC),
+    // Kept as the classic Telegram link blue on purpose — the brand color
+    // change is decorative (buttons/bubbles/accents), links stay recognizable.
     linkBlue: _hex(0x4B8DEE),
     onAccent: _hex(0xFFFFFF),
   );
@@ -363,6 +367,7 @@ class AppColors extends ThemeExtension<AppColors> {
     textSecondary: _hex(0x9A9A9A),
     textTertiary: _hex(0x707276),
     divider: _hex(0x303234),
+    // Kept as the classic Telegram link blue on purpose — see light theme note.
     linkBlue: _hex(0x5EA0FF),
     onAccent: _hex(0xFFFFFF),
   );

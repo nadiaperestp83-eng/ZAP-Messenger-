@@ -123,7 +123,7 @@ class _ProfileContactManagementViewState
   }
 
   Future<void> _editContact() async {
-    final result = await showGeneralDialog<_ContactEditResult>(
+    final result = await showGeneralDialog<ContactEditResult>(
       context: context,
       barrierDismissible: true,
       barrierLabel: 'Cancel',
@@ -136,7 +136,7 @@ class _ProfileContactManagementViewState
           child: child,
         ),
       ),
-      pageBuilder: (context, _, _) => _ContactEditDialog(
+      pageBuilder: (context, _, _) => ContactEditDialog(
         firstName: _firstName,
         lastName: _lastName,
         phoneNumber: _phoneNumber,
@@ -271,7 +271,7 @@ class _ProfileContactManagementViewState
   }
 
   Future<void> _suggestBirthdate() async {
-    final value = await showGeneralDialog<_SuggestedBirthdate>(
+    final value = await showGeneralDialog<SuggestedBirthdate>(
       context: context,
       barrierDismissible: true,
       barrierLabel: 'Cancel',
@@ -284,7 +284,7 @@ class _ProfileContactManagementViewState
           child: child,
         ),
       ),
-      pageBuilder: (_, _, _) => const _BirthdateDialog(),
+      pageBuilder: (_, _, _) => const BirthdateDialog(),
     );
     if (value == null) return;
     await _run(
@@ -768,8 +768,8 @@ class _ProfileContactManagementViewState
   }
 }
 
-class _ContactEditResult {
-  const _ContactEditResult({
+class ContactEditResult {
+  const ContactEditResult({
     required this.firstName,
     required this.lastName,
     required this.phoneNumber,
@@ -782,8 +782,8 @@ class _ContactEditResult {
   final bool sharePhoneNumber;
 }
 
-class _ContactEditDialog extends StatefulWidget {
-  const _ContactEditDialog({
+class ContactEditDialog extends StatefulWidget {
+  const ContactEditDialog({
     required this.firstName,
     required this.lastName,
     required this.phoneNumber,
@@ -798,10 +798,10 @@ class _ContactEditDialog extends StatefulWidget {
   final bool privacyExceptionNeeded;
 
   @override
-  State<_ContactEditDialog> createState() => _ContactEditDialogState();
+  State<ContactEditDialog> createState() => _ContactEditDialogState();
 }
 
-class _ContactEditDialogState extends State<_ContactEditDialog> {
+class _ContactEditDialogState extends State<ContactEditDialog> {
   late final TextEditingController _first = TextEditingController(
     text: widget.firstName,
   );
@@ -868,7 +868,7 @@ class _ContactEditDialogState extends State<_ContactEditDialog> {
           onTap: () {
             if (_first.text.trim().isEmpty) return;
             Navigator.of(context).pop(
-              _ContactEditResult(
+              ContactEditResult(
                 firstName: _first.text,
                 lastName: _last.text,
                 phoneNumber: _phone.text,
@@ -937,22 +937,22 @@ class _CheckBox extends StatelessWidget {
   );
 }
 
-class _SuggestedBirthdate {
-  const _SuggestedBirthdate(this.day, this.month, this.year);
+class SuggestedBirthdate {
+  const SuggestedBirthdate(this.day, this.month, this.year);
 
   final int day;
   final int month;
   final int year;
 }
 
-class _BirthdateDialog extends StatefulWidget {
-  const _BirthdateDialog();
+class BirthdateDialog extends StatefulWidget {
+  const BirthdateDialog();
 
   @override
-  State<_BirthdateDialog> createState() => _BirthdateDialogState();
+  State<BirthdateDialog> createState() => _BirthdateDialogState();
 }
 
-class _BirthdateDialogState extends State<_BirthdateDialog> {
+class _BirthdateDialogState extends State<BirthdateDialog> {
   final _day = TextEditingController();
   final _month = TextEditingController();
   final _year = TextEditingController();
@@ -991,7 +991,7 @@ class _BirthdateDialogState extends State<_BirthdateDialog> {
           final month = int.tryParse(_month.text) ?? 0;
           final year = int.tryParse(_year.text) ?? 0;
           if (day < 1 || day > 31 || month < 1 || month > 12) return;
-          Navigator.of(context).pop(_SuggestedBirthdate(day, month, year));
+          Navigator.of(context).pop(SuggestedBirthdate(day, month, year));
         },
       ),
     ],

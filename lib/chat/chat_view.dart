@@ -6081,18 +6081,26 @@ class _ChatViewState extends State<ChatView> {
                   Expanded(child: _headerTitleBlock(subtitle, actionActive)),
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => ChatInfoView(
-                          chatId: widget.chatId,
-                          title: _vm.peerTitle,
-                        ),
+                    onTap: () => unawaited(_startCall(false)),
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 16),
+                      child: AppIcon(
+                        HeroAppIcons.phone,
+                        size: 22,
+                        color: c.textPrimary,
                       ),
                     ),
-                    child: AppIcon(
-                      HeroAppIcons.bars,
-                      size: 22,
-                      color: c.textPrimary,
+                  ),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => unawaited(_startCall(true)),
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 16),
+                      child: AppIcon(
+                        HeroAppIcons.video,
+                        size: 22,
+                        color: c.textPrimary,
+                      ),
                     ),
                   ),
                   if (_vm.isForum) ...[
@@ -6126,6 +6134,7 @@ class _ChatViewState extends State<ChatView> {
     final c = context.colors;
     final titleText = Text(
       _vm.headerTitle,
+      textAlign: TextAlign.center,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: TextStyle(
@@ -6145,12 +6154,13 @@ class _ChatViewState extends State<ChatView> {
         : titleText;
     final content = Column(
       mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         if (_vm.isForum)
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(child: title),
+              Flexible(child: title),
               const SizedBox(width: 4),
               AppIcon(
                 HeroAppIcons.chevronDown,
@@ -6164,6 +6174,7 @@ class _ChatViewState extends State<ChatView> {
         if (subtitle.isNotEmpty)
           Text(
             subtitle,
+            textAlign: TextAlign.center,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
