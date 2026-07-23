@@ -659,9 +659,7 @@ class _ChatListViewState extends State<ChatListView>
       itemIndex: itemIndex,
       rowHeight: context.read<ThemeController>().rowHeight,
       maxScrollExtent: _scrollController.position.maxScrollExtent,
-      leadingExtent: context.read<ThemeController>().showChatListSearch
-          ? _searchPillExtent
-          : 0,
+      leadingExtent: 0,
     );
   }
 
@@ -794,9 +792,9 @@ class _ChatListViewState extends State<ChatListView>
 
   Widget _header() {
     final c = context.colors;
+    final theme = context.watch<ThemeController>();
     final useFilterMenu =
-        context.watch<ThemeController>().chatFolderDisplayMode ==
-        ChatFolderDisplayMode.menu;
+        theme.chatFolderDisplayMode == ChatFolderDisplayMode.menu;
     final activeFilter = _model.selectedFilter;
     return Container(
       color: c.listHeaderTint,
@@ -837,7 +835,8 @@ class _ChatListViewState extends State<ChatListView>
                           ),
                         ),
                       ),
-                      if (_meStatusId != 0) ...[
+                      if (_meStatusId != 0 &&
+                          theme.chatListStatusEmojiMode.visible) ...[
                         const SizedBox(width: AppSpacing.xs + 1),
                         GestureDetector(
                           behavior: HitTestBehavior.opaque,
@@ -849,6 +848,7 @@ class _ChatListViewState extends State<ChatListView>
                             id: _meStatusId,
                             size: 18,
                             color: c.textPrimary,
+                            animate: theme.chatListStatusEmojiMode.animate,
                           ),
                         ),
                       ],
@@ -919,6 +919,21 @@ class _ChatListViewState extends State<ChatListView>
                   ),
                 ),
               ),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const SearchView())),
+              child: SizedBox(
+                width: AppMetric.hitTarget,
+                height: AppMetric.hitTarget,
+                child: AppIcon(
+                  HeroAppIcons.magnifyingGlass,
+                  size: AppIconSize.toolbar,
+                  color: c.textPrimary,
+                ),
+              ),
+            ),
             GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () => setState(() {
@@ -1067,7 +1082,7 @@ class _ChatListViewState extends State<ChatListView>
   Widget _chatList() {
     final c = context.colors;
     final theme = context.watch<ThemeController>();
-    final showSearch = theme.showChatListSearch;
+    const showSearch = false;
     final archiveMode = theme.archivedChatsDisplayMode;
     return Container(
       color: c.background,

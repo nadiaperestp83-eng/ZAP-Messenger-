@@ -228,29 +228,12 @@ class _MomentsViewState extends State<MomentsView> {
     }
   }
 
-  List<ChatSummary> get _unreadChannels => _allChannels
-      .where((chat) => chat.unreadCount > 0 || chat.isMarkedUnread)
-      .toList();
-
   List<ChatSummary> get _allChannels {
     final byId = <int, ChatSummary>{};
     for (final chat in [..._channels.chats, ..._channels.archived]) {
       if (chat.kind == ChatKind.channel) byId[chat.id] = chat;
     }
     return byId.values.toList();
-  }
-
-  int get _newPostCount => _unreadChannels.fold<int>(
-    0,
-    (sum, chat) => sum + (chat.unreadCount > 0 ? chat.unreadCount : 1),
-  );
-
-  void _openDetail(Widget detail) {
-    if (widget.onOpenDetail != null) {
-      widget.onOpenDetail!(detail);
-      return;
-    }
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => detail));
   }
 
   Future<void> _createStory() async {
@@ -288,191 +271,17 @@ class _MomentsViewState extends State<MomentsView> {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final theme = context.watch<ThemeController>();
-    return Material(
-      color: c.groupedBackground,
-      child: Column(
-        children: [
-          const NavHeader(title: AppStringKeys.tabMoments),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.only(top: AppSpacing.md),
-              children: [
-                StoryShelf(
-                  model: _stories,
-                  canPublish: _canPublishStories,
-                  onCreate: _createStory,
-                  onManage: _manageStories,
-                ),
-                const SizedBox(height: AppSpacing.md),
-                Container(
-                  color: c.background,
-                  child: Column(
-                    children: [
-                      _menuRow(
-                        icon: HeroAppIcons.star.data,
-                        iconColor: const Color(0xFFFFBE00),
-                        title: AppStrings.t(AppStringKeys.tabMoments),
-                        trailing: _channelActivity(),
-                        onTap: () => _openDetail(
-                          ChannelMomentsView(
-                            isRootTab: widget.onOpenDetail != null,
-                            title: widget.onOpenDetail == null
-                                ? AppStrings.t(AppStringKeys.tabMoments)
-                                : AppStrings.t(AppStringKeys.tabFriendMoments),
-                            initialChannels: _allChannels,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                Container(
-                  color: c.background,
-                  child: Column(
-                    children: [
-                      _menuRow(
-                        icon: HeroAppIcons.music.data,
-                        iconColor: const Color(0xFFFF8A2A),
-                        title: AppStrings.t(AppStringKeys.profileDetailMusic),
-                        onTap: () => _openDetail(
-                          SharedMediaView(
-                            chatId: 0,
-                            title: AppStrings.t(
-                              AppStringKeys.profileDetailMusic,
-                            ),
-                            initialTab: 5,
-                            displayTitle: AppStringKeys.profileDetailMusic,
-                            lockedTab: true,
-                          ),
-                        ),
-                      ),
-                      _menuRow(
-                        icon: HeroAppIcons.video.data,
-                        iconColor: const Color(0xFF7B61FF),
-                        title: telegramText(AppStringKeys.sharedMediaVideos),
-                        onTap: () => _openDetail(
-                          SharedMediaView(
-                            chatId: 0,
-                            title: telegramText(
-                              AppStringKeys.sharedMediaVideos,
-                            ),
-                            initialTab: 4,
-                            displayTitle: AppStringKeys.sharedMediaVideos,
-                            lockedTab: true,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (theme.showShortVideos) ...[
-                  const SizedBox(height: AppSpacing.md),
-                  Container(
-                    color: c.background,
-                    child: _menuRow(
-                      icon: HeroAppIcons.solidFileVideo.data,
-                      iconColor: const Color(0xFFFF4D67),
-                      title: AppStrings.t(AppStringKeys.momentsShortVideos),
-                      onTap: () => ShortVideoLauncher.open(context),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
+    return ChannelMomentsView(
+      isRootTab: true,
+      title: AppStringKeys.tabMoments,
+      initialChannels: _allChannels,
+      onOpenDetail: widget.onOpenDetail,
+      topExtra: StoryShelf(
+        model: _stories,
+        canPublish: _canPublishStories,
+        onCreate: _createStory,
+        onManage: _manageStories,
       ),
-    );
-  }
-
-  Widget _menuRow({
-    required IconData icon,
-    required Color iconColor,
-    required String title,
-    required VoidCallback onTap,
-    Widget? trailing,
-  }) {
-    final c = context.colors;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: SizedBox(
-        height: 50,
-        child: Row(
-          children: [
-            const SizedBox(width: AppSpacing.xl),
-            SizedBox(width: 36, child: Icon(icon, size: 25, color: iconColor)),
-            const SizedBox(width: AppSpacing.md),
-            Text(
-              title.l10n(context),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 16, color: c.textPrimary),
-            ),
-            const Spacer(),
-            if (trailing != null) ...[
-              const SizedBox(width: AppSpacing.md),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 190),
-                child: trailing,
-              ),
-            ],
-            const SizedBox(width: AppSpacing.md),
-            AppIcon(HeroAppIcons.chevronRight, size: 18, color: c.textTertiary),
-            const SizedBox(width: AppSpacing.xl),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _channelActivity() {
-    final unread = _unreadChannels;
-    if (unread.isEmpty) return const SizedBox.shrink();
-    final c = context.colors;
-    final avatars = unread.take(2).toList();
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          AppLocalizations.of(
-            context,
-          ).format(AppStringKeys.momentsNewPostsCount, '$_newPostCount'),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(fontSize: 14, color: c.textSecondary),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        SizedBox(
-          width: avatars.length == 1 ? 30 : 48,
-          height: 30,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              for (var i = 0; i < avatars.length; i++)
-                Positioned(
-                  left: i * 18,
-                  child: Container(
-                    padding: const EdgeInsets.all(1.5),
-                    decoration: BoxDecoration(
-                      color: c.background,
-                      shape: BoxShape.circle,
-                    ),
-                    child: PhotoAvatar(
-                      title: avatars[i].title,
-                      photo: avatars[i].photo,
-                      size: 27,
-                      square: true,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }
@@ -484,12 +293,14 @@ class ChannelMomentsView extends StatefulWidget {
     this.title = AppStringKeys.tabMoments,
     this.initialChannels = const [],
     this.onOpenDetail,
+    this.topExtra,
   });
 
   final bool isRootTab;
   final String title;
   final List<ChatSummary> initialChannels;
   final ValueChanged<Widget>? onOpenDetail;
+  final Widget? topExtra;
 
   @override
   State<ChannelMomentsView> createState() => _ChannelMomentsViewState();
@@ -1529,6 +1340,7 @@ class _ChannelMomentsViewState extends State<ChannelMomentsView> {
               ],
             ),
           ),
+          if (widget.topExtra != null) widget.topExtra!,
           Expanded(
             child: Container(
               color: c.background,
