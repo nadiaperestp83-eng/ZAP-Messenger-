@@ -3710,8 +3710,10 @@ class _ChatInputBarState extends State<ChatInputBar> {
   Future<void> _sendLocation() async {
     final start = await resolveLocationPickerStart();
     if (!mounted) return;
-    final picked = await Navigator.of(context).push<LatLng>(
-      MaterialPageRoute(builder: (_) => LocationPickerView(initial: start)),
+    final picked = await showLocationPickerSheet<LatLng>(
+      context: context,
+      initial: start,
+      chatId: vm.chatId,
     );
     if (picked != null) {
       widget.vm.sendLocation(picked.latitude, picked.longitude);
