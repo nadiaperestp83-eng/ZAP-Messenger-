@@ -1,4 +1,6 @@
-# Mithka
+# ZapZap 
+
+Under development
 
 A cross-platform (Android) Telegram client built with **Flutter** on top of
 **[TDLib](https://core.telegram.org/tdlib)** via FFI, with a dense,
@@ -6,11 +8,11 @@ mobile-native messaging interface.
 
 > **Disclaimer**
 >
-> Mithka is an **independent, unofficial** project. It is **not affiliated with,
+> Zap is a fork from Mithka is an **independent, unofficial** project. It is **not affiliated with,
 > endorsed by, or connected to Telegram** in any way. "Telegram" is a trademark
 > of its respective owner.
 >
-> Mithka is also **not affiliated with, endorsed by, sponsored by, or otherwise
+> It is also **not affiliated with, endorsed by, sponsored by, or otherwise
 > connected to Tencent or QQ**. It does not use, include, copy, or redistribute
 > any proprietary QQ assets. "Tencent" and "QQ" and their associated trademarks
 > and assets belong to their respective owners.
@@ -26,17 +28,14 @@ mobile-native messaging interface.
 
 ## The name
 
-A play on small units of mass, by way of the penguin:
+A play on small units of mass, by way of the Whatsapp:
 
-- The penguin mascot is a **pengram** — 🐧 + *gram*, read as **penta-gram** ≈ **5 g**.
-- One **mithqāl** (مثقال), a traditional Islamic unit of mass, is **≈ 4.6875 g**.
+- The name is Portuguese slang used for WhatsApp.
 
-So **Mithka** (from *mithqāl*) is the featherweight just under the (Tele)gram
-penguin on the scale.
 
 ## What it is
 
-Mithka connects to **real Telegram** (your account, your chats) through TDLib and
+ZapZap connects to **real Telegram** (your account, your chats) through TDLib and
 presents it with a custom interface: chat list, conversations with live state,
 reactions and stickers (including animated `.tgs`/`.webm`), voice notes, polls
 and checklists, Telegram Communities, location sharing, contacts, profiles,
@@ -65,16 +64,15 @@ class Secrets {
 ```
 
 The TDLib native library is prepared with helper scripts (output is git-ignored).
-CI downloads the latest prebuilt Android and iOS artifacts from
-[`iebb/mithka-tdjson`](https://github.com/iebb/mithka-tdjson). The Android
+
+The Android
 source-build script is kept for local fallback/debug builds.
 
 ```bash
 # Android local fallback (per ABI) — produces android/app/src/main/jniLibs/<abi>/libtdjson.so
 scripts/build-tdjson-android.sh arm64-v8a
 
-# iOS — downloads ios/tdjson/tdjson.xcframework consumed by the Runner
-scripts/build-tdjson-ios.sh
+
 ```
 
 Then run:
@@ -110,7 +108,7 @@ through the same channel-aware workflow.
 
 ## License & credits
 
-Mithka is licensed under the [BSD 3-Clause License](LICENSE).
+ZapZap follow same Mithka is licensed under the [BSD 3-Clause License](LICENSE).
 
 TDLib and the components under `third_party/` retain their own licenses. Mithka
 ships no third-party app's proprietary assets or trademarks.
