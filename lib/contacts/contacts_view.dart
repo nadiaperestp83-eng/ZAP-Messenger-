@@ -40,7 +40,7 @@ class _ContactsViewState extends State<ContactsView> {
   final _vm = ContactsViewModel();
   String _meName = AppStringKeys.chatMeLabel;
   TdFileRef? _mePhoto;
-  int _tab = 0; // 0 好友, 1 群聊, 2 频道, 3 机器人
+  int _tab = 0; // 0 Todos, 1 Online, 2 Recentes, 3 Bloqueados
 
   @override
   void initState() {
@@ -105,9 +105,9 @@ class _ContactsViewState extends State<ContactsView> {
                 _tabs(),
                 switch (_tab) {
                   0 => _contactList(_vm.contacts, loading: _vm.contactsLoading),
-                  1 => _chatList(_vm.groups, loading: _vm.chatsLoading),
-                  2 => _chatList(_vm.channels, loading: _vm.chatsLoading),
-                  _ => _contactList(_vm.bots, loading: _vm.contactsLoading),
+                  1 => _contactList(_vm.online, loading: _vm.contactsLoading),
+                  2 => _contactList(_vm.recent, loading: _vm.contactsLoading),
+                  _ => _blockedList(),
                 },
               ],
             ),
@@ -186,12 +186,7 @@ class _ContactsViewState extends State<ContactsView> {
 
   Widget _tabs() {
     final c = context.colors;
-    const labels = [
-      AppStringKeys.contactsFriends,
-      AppStringKeys.chatInfoGroupChat,
-      AppStringKeys.tabChannels,
-      AppStringKeys.chatsSearchBots,
-    ];
+    const labels = ['Todos', 'Online', 'Recentes', 'Bloqueados'];
     return Container(
       margin: const EdgeInsets.only(top: 4),
       decoration: BoxDecoration(
@@ -211,7 +206,7 @@ class _ContactsViewState extends State<ContactsView> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       Text(
-                        labels[i].l10n(context),
+                        labels[i],
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: _tab == i
@@ -257,9 +252,7 @@ class _ContactsViewState extends State<ContactsView> {
     if (contacts.isEmpty) {
       return _stateCard(
         loading: loading,
-        emptyText: _tab == 3
-            ? AppStringKeys.contactsNoBots
-            : AppStringKeys.contactsNoContacts,
+        emptyText: AppStringKeys.contactsNoContacts,
       );
     }
     return _card([
@@ -318,6 +311,79 @@ class _ContactsViewState extends State<ContactsView> {
           ),
         ),
         if (contact != contacts.last) const InsetDivider(leadingInset: 70),
+      ],
+    ]);
+  }
+
+  Widget _blockedList() {
+    final c = context.colors;
+    final blocked = _vm.blocked;
+    if (blocked.isEmpty) {
+      return _stateCard(
+        loading: _vm.blockedLoading,
+        emptyText: AppStringKeys.contactsNoContacts,
+      );
+    }
+    return _card([
+      for (final contact in blocked) ...[
+        SizedBox(
+          height: 64,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(
+              children: [
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _openDetail(
+                    ProfileDetailView(
+                      userId: contact.id,
+                      name: contact.name,
+                      showBackButton: widget.onOpenDetail == null,
+                    ),
+                  ),
+                  child: PhotoAvatar(
+                    title: contact.name,
+                    photo: contact.photo,
+                    size: 44,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    contact.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 16, color: c.textPrimary),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => unawaited(_vm.unblock(contact.id)),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.brand.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text(
+                      'Desbloquear',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.brand,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (contact != blocked.last) const InsetDivider(leadingInset: 70),
       ],
     ]);
   }
@@ -414,13 +480,34 @@ class ContactsViewModel extends ChangeNotifier {
   List<Contact> bots = [];
   List<ChatSummary> groups = [];
   List<ChatSummary> channels = [];
+  List<Contact> blocked = [];
   bool contactsLoading = true;
   bool chatsLoading = true;
+  bool blockedLoading = true;
+
+  /// Contacts, online-only (used by the "Online" tab).
+  List<Contact> get online => contacts.where((c) => c.isOnline).toList();
+
+  /// Contacts sorted by most-recent activity: currently online first, then
+  /// by how recently TDLib last saw them online, newest first. TDLib only
+  /// gives an exact timestamp for `userStatusOffline`; the coarser buckets
+  /// (recently / last week / last month) are approximated so they still sort
+  /// in a sensible relative order. This does not yet factor in your most
+  /// recent conversation with each contact (that lives in the chat list, a
+  /// separate data source) — only their account/status activity.
+  List<Contact> get recent {
+    final list = [...contacts];
+    list.sort(
+      (a, b) => (_activity[b.id] ?? 0).compareTo(_activity[a.id] ?? 0),
+    );
+    return list;
+  }
 
   bool _started = false;
   final Map<int, ChatSummary> _groupIndex = {};
   final Map<int, ChatSummary> _channelIndex = {};
   final Map<int, Contact> _botIndex = {};
+  final Map<int, int> _activity = {};
   final Set<int> _resolvingBots = {};
   final Set<String> _loadingChatLists = {};
   final Set<String> _exhaustedChatLists = {};
@@ -433,8 +520,77 @@ class ContactsViewModel extends ChangeNotifier {
     if (_started) return;
     _started = true;
     _loadContacts();
+    _loadBlocked();
     _subscribe();
     _prefetchChats();
+  }
+
+  /// Coarse recency score (seconds, unix-epoch scale) derived from TDLib's
+  /// `UserStatus`, used only to sort the "Recentes" tab relative to itself —
+  /// not shown to the person, so the approximation for bucketed statuses is
+  /// fine.
+  int _activityScore(Map<String, dynamic> user) {
+    final status = user.obj('status');
+    final nowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    switch (status?.type) {
+      case 'userStatusOnline':
+        return nowSeconds + 1; // always ranks above any real timestamp
+      case 'userStatusOffline':
+        return status?.integer('was_online') ?? 0;
+      case 'userStatusRecently':
+        return nowSeconds - 6 * 3600;
+      case 'userStatusLastWeek':
+        return nowSeconds - 4 * 24 * 3600;
+      case 'userStatusLastMonth':
+        return nowSeconds - 20 * 24 * 3600;
+      default:
+        return 0;
+    }
+  }
+
+  Future<void> _loadBlocked() async {
+    blockedLoading = true;
+    _safeNotify();
+    try {
+      final result = await TdClient.shared.query({
+        '@type': 'getBlockedMessageSenders',
+        'block_list': {'@type': 'blockListMain'},
+        'offset': 0,
+        'limit': 100,
+      });
+      if (_disposed) return;
+      final senders = result.objects('senders') ?? const <Map<String, dynamic>>[];
+      final loaded = <Contact>[];
+      for (final sender in senders) {
+        final userId = sender.obj('sender_id')?.int64('user_id');
+        if (userId == null) continue;
+        try {
+          final user = await TdClient.shared.query({
+            '@type': 'getUser',
+            'user_id': userId,
+          });
+          if (_disposed) return;
+          loaded.add(_contactFromUser(userId, user));
+        } catch (_) {}
+      }
+      blocked = loaded;
+    } catch (_) {
+    } finally {
+      blockedLoading = false;
+      _safeNotify();
+    }
+  }
+
+  Future<void> unblock(int userId) async {
+    try {
+      await TdClient.shared.query({
+        '@type': 'toggleMessageSenderIsBlocked',
+        'sender_id': {'@type': 'messageSenderUser', 'user_id': userId},
+        'is_blocked': false,
+      });
+      blocked.removeWhere((c) => c.id == userId);
+      _safeNotify();
+    } catch (_) {}
   }
 
   Future<void> _loadContacts() async {
@@ -454,6 +610,7 @@ class ContactsViewModel extends ChangeNotifier {
           });
           if (_disposed) return;
           final contact = _contactFromUser(id, user);
+          _activity[id] = _activityScore(user);
           if (_isBotUser(user)) {
             _botIndex[id] = contact;
           } else {

@@ -64,11 +64,14 @@ class ChatRowView extends StatelessWidget {
       color: selected
           ? c.listHeaderTint
           : (chat.isPinned ? c.pinnedRow : c.background),
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.xl,
+        vertical: AppSpacing.sm,
+      ),
       child: Row(
         children: [
           _avatar(context),
-          const SizedBox(width: AppSpacing.lg),
+          const SizedBox(width: AppSpacing.xl),
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -111,7 +114,7 @@ class ChatRowView extends StatelessWidget {
                     ],
                   ],
                 ),
-                const SizedBox(height: AppSpacing.xs),
+                const SizedBox(height: AppSpacing.sm),
                 chat.draftText.trim().isNotEmpty
                     ? ChatPreviewText(message: chat.draftText, draft: true)
                     : ChatPreviewText(

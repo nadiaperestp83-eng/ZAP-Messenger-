@@ -151,6 +151,8 @@ class ChatListView extends StatefulWidget {
   State<ChatListView> createState() => _ChatListViewState();
 }
 
+enum _QuickFilter { all, unread, groups, channels }
+
 class _ChatListViewState extends State<ChatListView>
     with SingleTickerProviderStateMixin {
   static const _folderTransitionDuration = Duration(milliseconds: 210);
@@ -172,6 +174,7 @@ class _ChatListViewState extends State<ChatListView>
   int? _openSwipeChat;
   bool _showPlusMenu = false;
   bool _showFilterMenu = false;
+  _QuickFilter _quickFilter = _QuickFilter.all;
   int? _pendingScrollToFirstUnreadRequest;
   bool _pendingScrollShouldToggle = false;
   bool _pendingToggleMayHaveUnread = false;
@@ -704,10 +707,12 @@ class _ChatListViewState extends State<ChatListView>
             child: Column(
               children: [
                 _header(),
-                if (folderMode == ChatFolderDisplayMode.tabs &&
-                    _model.filters.length > 1)
-                  _chatFolderTabs(),
-                Expanded(child: _chatList()),
+                _quickFilterChips(),
+                Expanded(
+                  child: _quickFilter == _QuickFilter.all
+                      ? _chatList()
+                      : _simpleFilteredList(),
+                ),
               ],
             ),
           ),
@@ -716,6 +721,93 @@ class _ChatListViewState extends State<ChatListView>
             _filterMenuOverlay(),
         ],
       ),
+    );
+  }
+
+  /// WhatsApp-style fixed quick filter chips (Todas/Não lidas/Grupos/Canais).
+  /// Replaces the old custom-folder tabs row.
+  Widget _quickFilterChips() {
+    final c = context.colors;
+    final chips = <(_QuickFilter, String)>[
+      (_QuickFilter.all, 'Todas'),
+      (_QuickFilter.unread, 'Não lidas'),
+      (_QuickFilter.groups, 'Grupos'),
+      (_QuickFilter.channels, 'Canais'),
+    ];
+    return SizedBox(
+      height: 44,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.xl,
+          vertical: AppSpacing.sm,
+        ),
+        children: [
+          for (final chip in chips) ...[
+            _quickFilterChip(chip.$1, chip.$2, c),
+            const SizedBox(width: AppSpacing.sm),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _quickFilterChip(_QuickFilter value, String label, AppColors c) {
+    final selected = _quickFilter == value;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => setState(() => _quickFilter = value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? AppTheme.brand : c.groupedBackground,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: selected ? Colors.white : c.textPrimary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Flat, ungrouped list used for Não lidas/Grupos/Canais — the sophisticated
+  /// community-grouped/archive-pull pipeline in [_chatList] is reserved for
+  /// "Todas" so this stays low-risk and simple.
+  Widget _simpleFilteredList() {
+    bool matches(ChatSummary chat) => switch (_quickFilter) {
+      _QuickFilter.all => true,
+      _QuickFilter.unread => chat.unreadCount > 0 || chat.isMarkedUnread,
+      _QuickFilter.groups => chat.kind == ChatKind.group,
+      _QuickFilter.channels => chat.kind == ChatKind.channel,
+    };
+    final items = _model.chats.where(matches).toList();
+    if (items.isEmpty) {
+      return Center(
+        child: Text(
+          'Nada por aqui',
+          style: TextStyle(color: context.colors.textTertiary),
+        ),
+      );
+    }
+    return ListView.builder(
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        final chat = items[index];
+        return GestureDetector(
+          onTap: () => _openChat(chat),
+          child: ChatRowView(
+            chat: chat,
+            onClearUnread: () => _model.markChatsRead([chat]),
+          ),
+        );
+      },
     );
   }
 
@@ -798,7 +890,7 @@ class _ChatListViewState extends State<ChatListView>
     final activeFilter = _model.selectedFilter;
     return Container(
       color: c.listHeaderTint,
-      padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
+      padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 6),
       child: Padding(
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.xxl,

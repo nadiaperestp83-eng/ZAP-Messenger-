@@ -180,7 +180,7 @@ abstract final class AppIconSize {
 
 abstract final class AppMetric {
   static const double navHeaderHeight = 44;
-  static const double listRowHeight = 64;
+  static const double listRowHeight = 72;
   static const double settingsRowHeight = 56;
   static const double compactSettingsRowHeight = 52;
   static const double avatarSize = 48;
