@@ -944,7 +944,7 @@ class _LazyTabStackState extends State<_LazyTabStack> {
 
   @override
   Widget build(BuildContext context) {
-    return IndexedStack(
+    final stack = IndexedStack(
       index: widget.selection,
       children: [
         for (final tab in widget.items)
@@ -952,6 +952,24 @@ class _LazyTabStackState extends State<_LazyTabStack> {
               ? widget.builder(tab)
               : const SizedBox.expand(),
       ],
+    );
+    // A light fade + slight upward slide on every tab switch. Keyed on the
+    // selection so the tween restarts each time, but the IndexedStack child
+    // itself is never rebuilt/disposed — each tab's scroll position and
+    // in-memory state stay exactly as they were.
+    return TweenAnimationBuilder<double>(
+      key: ValueKey(widget.selection),
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+      builder: (context, value, child) => Opacity(
+        opacity: value,
+        child: Transform.translate(
+          offset: Offset(0, (1 - value) * 8),
+          child: child,
+        ),
+      ),
+      child: stack,
     );
   }
 }
