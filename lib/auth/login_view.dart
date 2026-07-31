@@ -465,7 +465,7 @@ class _LoginViewState extends State<LoginView> {
           ),
           const SizedBox(height: 14),
           Text(
-            'Mithka',
+            'ZapZap',
             style: TextStyle(
               fontSize: 26,
               fontWeight: FontWeight.bold,
