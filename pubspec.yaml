@@ -1,5 +1,5 @@
 name: mithka
-description: "Mithka — a cross-platform Telegram client (Flutter), built on TDLib."
+description: "ZapZap — a cross-platform Telegram client (Flutter), built on TDLib."
 publish_to: 'none'
 version: 0.7.0+281
 
