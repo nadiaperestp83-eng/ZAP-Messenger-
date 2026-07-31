@@ -1021,7 +1021,7 @@ extension _DisplayAppearanceHelpers on AppearanceView {
       value: theme.fontScale,
       child: Column(
         children: [
-          sample('Mithka', AppTextSize.title, FontWeight.w700),
+          sample('ZapZap', AppTextSize.title, FontWeight.w700),
           const SizedBox(height: AppSpacing.lg),
           sample(
             AppStrings.t(AppStringKeys.savedMessages),
