@@ -9,6 +9,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:mithka/l10n/app_localizations.dart';
 import 'package:provider/provider.dart';
 
@@ -41,6 +42,11 @@ class _ContactsViewState extends State<ContactsView> {
   String _meName = AppStringKeys.chatMeLabel;
   TdFileRef? _mePhoto;
   int _tab = 0; // 0 Todos, 1 Online, 2 Recentes, 3 Bloqueados
+  final ScrollController _scroll = ScrollController();
+  static const _alphabet = [
+    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+    'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '#',
+  ];
 
   @override
   void initState() {
@@ -54,6 +60,7 @@ class _ContactsViewState extends State<ContactsView> {
 
   @override
   void dispose() {
+    _scroll.dispose();
     _vm.dispose();
     super.dispose();
   }
@@ -92,29 +99,114 @@ class _ContactsViewState extends State<ContactsView> {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final showAlphabetBar = _tab == 0 || _tab == 1;
     return Container(
       color: c.groupedBackground,
       child: Column(
         children: [
           _header(),
           Expanded(
-            child: ListView(
-              padding: EdgeInsets.zero,
+            child: Stack(
               children: [
-                _searchPill(),
-                _tabs(),
-                switch (_tab) {
-                  0 => _contactList(_vm.contacts, loading: _vm.contactsLoading),
-                  1 => _contactList(_vm.online, loading: _vm.contactsLoading),
-                  2 => _contactList(_vm.recent, loading: _vm.contactsLoading),
-                  _ => _blockedList(),
-                },
+                ListView(
+                  controller: _scroll,
+                  padding: EdgeInsets.zero,
+                  children: [
+                    _searchPill(),
+                    _tabs(),
+                    switch (_tab) {
+                      0 => _contactList(
+                        _vm.contacts,
+                        loading: _vm.contactsLoading,
+                      ),
+                      1 => _contactList(_vm.online, loading: _vm.contactsLoading),
+                      2 => _contactList(_vm.recent, loading: _vm.contactsLoading),
+                      _ => _blockedList(),
+                    },
+                  ],
+                ),
+                if (showAlphabetBar) _alphabetBar(),
               ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  /// Discreet A-Z scrubber — jumps the list to the first contact whose name
+  /// starts with the tapped letter. Only shown for tabs that stay
+  /// alphabetically sorted (Todos/Online); "Recentes" is sorted by activity
+  /// instead, so a letter jump wouldn't make sense there.
+  Widget _alphabetBar() {
+    final c = context.colors;
+    return Positioned(
+      right: 2,
+      top: 8,
+      bottom: 8,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onVerticalDragStart: (details) => _jumpToTouch(details.localPosition),
+        onVerticalDragUpdate: (details) => _jumpToTouch(details.localPosition),
+        child: Container(
+          width: 18,
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              for (final letter in _alphabet)
+                Text(
+                  letter,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: c.textTertiary,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _jumpToTouch(Offset localPosition) {
+    // The bar lays its letters out with even spacing top-to-bottom, so we
+    // can map a touch's vertical position straight back to an index.
+    const barPadding = 6.0;
+    final usableHeight =
+        (context.size?.height ?? 600) - 16 - barPadding * 2;
+    final ratio = ((localPosition.dy - 8 - barPadding) / usableHeight).clamp(
+      0.0,
+      1.0,
+    );
+    final index = (ratio * (_alphabet.length - 1)).round();
+    _jumpToLetter(_alphabet[index]);
+  }
+
+  void _jumpToLetter(String letter) {
+    final list = _tab == 0 ? _vm.contacts : _vm.online;
+    if (list.isEmpty) return;
+    final target = letter == '#'
+        ? list.length - 1
+        : list.indexWhere(
+            (contact) =>
+                contact.name.isNotEmpty &&
+                contact.name[0].toUpperCase() == letter,
+          );
+    if (target < 0) return;
+    const headerOffset = 106.0; // search pill (52) + tabs (54)
+    const rowHeight = 64.5; // 64 row + 0.5 divider
+    final offset = headerOffset + target * rowHeight;
+    final max = _scroll.position.hasContentDimensions
+        ? _scroll.position.maxScrollExtent
+        : offset;
+    _scroll.animateTo(
+      offset.clamp(0, max),
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+    );
+    HapticFeedback.selectionClick();
   }
 
   Widget _header() {
