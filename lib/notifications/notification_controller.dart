@@ -91,7 +91,7 @@ class NotificationController with WidgetsBindingObserver, ChangeNotifier {
   static const _androidChannel = AndroidNotificationChannel(
     'messages',
     'Messages',
-    description: 'Incoming Mithka messages',
+    description: 'Incoming ZapZap messages',
     importance: Importance.high,
   );
   static const _notificationTapChannel = MethodChannel(
@@ -299,7 +299,7 @@ class NotificationController with WidgetsBindingObserver, ChangeNotifier {
       }
       final showPreview =
           latestEffective.showPreview && _notificationPreferences.inAppPreview;
-      final chatTitle = latestChat.str('title') ?? 'Mithka';
+      final chatTitle = latestChat.str('title') ?? 'ZapZap';
       final isTargetAccountActive = clientId == _client.activeClientId;
       final accountName = isTargetAccountActive
           ? null
@@ -352,14 +352,14 @@ class NotificationController with WidgetsBindingObserver, ChangeNotifier {
         latestEffective.muted) {
       return;
     }
-    final chatTitle = latestChat.str('title') ?? 'Mithka';
+    final chatTitle = latestChat.str('title') ?? 'ZapZap';
     final isTargetAccountActive = clientId == _client.activeClientId;
     final accountName = isTargetAccountActive
         ? null
         : await _notificationAccountName(clientId);
     final visibleTitle = _notificationPreferences.namesOnLockScreen
         ? chatTitle
-        : 'Mithka';
+        : 'ZapZap';
     final title = notificationTitleForAccount(
       title: visibleTitle,
       isActiveAccount: isTargetAccountActive,
@@ -849,7 +849,7 @@ class NotificationController with WidgetsBindingObserver, ChangeNotifier {
     _lastOpenedAt = now;
     ChatDeepLinkController.shared.openChat(
       chatId: target.chatId,
-      title: target.title ?? 'Mithka',
+      title: target.title ?? 'ZapZap',
       messageId: target.messageId,
       accountUserId: target.accountUserId,
       accountSlot: target.accountSlot,
