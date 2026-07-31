@@ -35,8 +35,15 @@ class UpdateChecker {
   }) => !isGooglePlayBuild;
 
   /// Checks once per launch (Android only) and prompts if a newer same-ABI APK
-  /// exists. Safe to call from any screen's first frame; no-op otherwise.
+  /// Disabled: this checked the upstream project's GitHub Releases
+  /// (iebb/mithka), which has nothing to do with this fork's own versions —
+  /// it was prompting people to "update" to an unrelated build. No-op until
+  /// this fork has its own release feed to point at instead.
   static Future<void> maybePrompt(BuildContext context) async {
+    return;
+  }
+
+  static Future<void> _disabledMaybePrompt(BuildContext context) async {
     if (!automaticChecksEnabled() ||
         !Platform.isAndroid ||
         _checkedThisLaunch) {
