@@ -89,7 +89,7 @@ class _AboutViewState extends State<AboutView> {
                       ),
                       const SizedBox(height: 14),
                       Text(
-                        'Mithka',
+                        'ZapZap',
                         style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
