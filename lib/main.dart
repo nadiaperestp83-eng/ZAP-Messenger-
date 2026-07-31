@@ -401,7 +401,7 @@ class _MithkaAppState extends State<MithkaApp> with WidgetsBindingObserver {
         builder: (context, theme, accounts, locale, _, _) {
           return MaterialApp(
             navigatorKey: appNavigatorKey,
-            title: 'Mithka',
+            title: 'ZapZap',
             debugShowCheckedModeBanner: false,
             locale: locale.locale,
             localeResolutionCallback: (locale, _) => locale == null
