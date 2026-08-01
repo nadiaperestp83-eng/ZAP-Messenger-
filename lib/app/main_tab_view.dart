@@ -397,50 +397,31 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
       animation: _tabBar,
       builder: (context, _) {
         final showTabBar = _tabBar.depth(activeTabIndex) == 0;
-        // Reserve room at the bottom of the content equal to the floating
-        // tab bar's own footprint (height + its margin), so the last row of
-        // whichever tab is showing never sits hidden underneath it — while
-        // the tab bar itself, being the last item in this Stack, still
-        // overlaps and blurs whatever scrolls behind it for a real glass
-        // effect (not just a flat-colored block).
-        const barHeight = 62.0;
-        const barBottomMargin = 8.0;
-        final reservedBottom =
-            showTabBar
-                ? barHeight + barBottomMargin + MediaQuery.of(context).padding.bottom
-                : 0.0;
-        return Stack(
-          children: [
-            Positioned.fill(child: Container(color: context.colors.background)),
-            Positioned.fill(
-              child: Padding(
-                padding: EdgeInsets.only(bottom: reservedBottom),
-                child: _musicAwareContent(_stack(tabs)),
-              ),
-            ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: reservedBottom - barBottomMargin,
-              child: _fixedMusicPlayer(safeBottom: !showTabBar),
-            ),
-            if (showTabBar)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: AnimatedBuilder(
+        return Scaffold(
+          backgroundColor: context.colors.background,
+          extendBody: true,
+          body: _musicAwareContent(_stack(tabs)),
+          bottomNavigationBar: showTabBar
+              ? AnimatedBuilder(
                   animation: _unread,
-                  builder: (context, _) => _ClassicTabBar(
-                    selection: selection,
-                    onSelect: _select,
-                    items: tabs,
-                    onClearUnread: _chatListController.markAllRead,
-                    unread: _unread.countFor(theme.unreadBadgeMode),
+                  builder: (context, _) => Padding(
+                    padding: const EdgeInsets.only(top: 0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _fixedMusicPlayer(safeBottom: false),
+                        _ClassicTabBar(
+                          selection: selection,
+                          onSelect: _select,
+                          items: tabs,
+                          onClearUnread: _chatListController.markAllRead,
+                          unread: _unread.countFor(theme.unreadBadgeMode),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ),
-          ],
+                )
+              : _fixedMusicPlayer(safeBottom: true),
         );
       },
     );
