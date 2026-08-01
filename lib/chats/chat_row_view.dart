@@ -7,6 +7,7 @@
 //
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../chat/custom_emoji.dart';
@@ -94,11 +95,9 @@ class ChatRowView extends StatelessWidget {
                             : chat.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
+                        style: GoogleFonts.inter(
                           fontSize: AppTextSize.body,
-                          fontWeight: chat.peerIsPremium && !bookmarkView
-                              ? FontWeight.w600
-                              : FontWeight.w500,
+                          fontWeight: FontWeight.w700,
                           color: nameColor,
                         ),
                       ),
@@ -215,8 +214,9 @@ class ChatRowView extends StatelessWidget {
           children: [
             Text(
               DateText.listLabel(chat.date),
-              style: TextStyle(
+              style: GoogleFonts.inter(
                 fontSize: AppTextSize.caption,
+                fontWeight: FontWeight.w400,
                 color: c.textTertiary,
               ),
             ),
