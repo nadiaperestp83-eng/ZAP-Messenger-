@@ -1050,34 +1050,38 @@ class _ClassicTabBar extends StatelessWidget {
         16,
         8 + MediaQuery.of(context).padding.bottom,
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(28),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
-          child: Container(
-            height: 62,
-            decoration: BoxDecoration(
-              color: c.navBar.withValues(alpha: 0.62),
-              borderRadius: BorderRadius.circular(28),
-              border: Border.all(
-                color: c.divider.withValues(alpha: 0.5),
-                width: 0.6,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.08),
-                  blurRadius: 20,
-                  offset: const Offset(0, 8),
-                ),
-              ],
+      child: Container(
+        height: 62,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.10),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
             ),
-            child: Row(
-              children: [
-                for (var i = 0; i < items.length; i++)
-                  Expanded(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => onSelect(i),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(28),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+            child: Container(
+              decoration: BoxDecoration(
+                color: c.navBar.withValues(alpha: 0.55),
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(
+                  color: c.divider.withValues(alpha: 0.5),
+                  width: 0.6,
+                ),
+              ),
+              child: Row(
+                children: [
+                  for (var i = 0; i < items.length; i++)
+                    Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => onSelect(i),
                       child: Center(
                         child: SizedBox(
                           width: 64,
@@ -1131,6 +1135,7 @@ class _ClassicTabBar extends StatelessWidget {
             ),
           ),
         ),
+      ),
       ),
     );
   }
