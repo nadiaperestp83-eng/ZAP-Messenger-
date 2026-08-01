@@ -473,7 +473,12 @@ class _MithkaAppState extends State<MithkaApp> with WidgetsBindingObserver {
                 ],
               );
               return AnnotatedRegion<SystemUiOverlayStyle>(
-                value: systemUiOverlayStyleForSurface(context.colors.navBar),
+                value: systemUiOverlayStyleForSurface(
+                  context.colors.navBar,
+                ).copyWith(
+                  systemNavigationBarColor: Colors.transparent,
+                  systemNavigationBarContrastEnforced: false,
+                ),
                 child: _ScaledAppView(
                   fontScale: theme.fontScale,
                   interfaceScale: theme.interfaceScale,
