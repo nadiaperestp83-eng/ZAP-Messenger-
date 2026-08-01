@@ -10,6 +10,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:mithka/l10n/app_localizations.dart';
 import 'package:provider/provider.dart';
 
@@ -112,7 +113,6 @@ class _ContactsViewState extends State<ContactsView> {
                   controller: _scroll,
                   padding: EdgeInsets.zero,
                   children: [
-                    _searchPill(),
                     _tabs(),
                     switch (_tab) {
                       0 => _contactList(
@@ -195,7 +195,7 @@ class _ContactsViewState extends State<ContactsView> {
                 contact.name[0].toUpperCase() == letter,
           );
     if (target < 0) return;
-    const headerOffset = 106.0; // search pill (52) + tabs (54)
+    const headerOffset = 54.0; // tabs row only (search pill removed)
     const rowHeight = 64.5; // 64 row + 0.5 divider
     final offset = headerOffset + target * rowHeight;
     final max = _scroll.position.hasContentDimensions
@@ -216,61 +216,48 @@ class _ContactsViewState extends State<ContactsView> {
       padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Row(
-          children: [
-            GestureDetector(
-              onTap: () => context.read<dc.DrawerController>().open(),
-              child: PhotoAvatar(title: _meName, photo: _mePhoto, size: 34),
-            ),
-            const SizedBox(width: 12),
-            Text(
-              AppStringKeys.tabContacts.l10n(context),
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w600,
-                color: c.textPrimary,
+        child: SizedBox(
+          height: AppMetric.hitTarget,
+          child: Row(
+            children: [
+              Text(
+                AppStringKeys.tabContacts.l10n(context),
+                style: GoogleFonts.inter(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: c.textPrimary,
+                  letterSpacing: -0.3,
+                ),
               ),
-            ),
-            const Spacer(),
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: _showAddMenu,
-              child: AppIcon(
-                HeroAppIcons.userPlus,
-                size: 22,
-                color: c.textPrimary,
+              const Spacer(),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {},
+                child: SizedBox(
+                  width: AppMetric.hitTarget,
+                  height: AppMetric.hitTarget,
+                  child: AppIcon(
+                    HeroAppIcons.magnifyingGlass,
+                    size: AppIconSize.toolbar,
+                    color: c.textPrimary,
+                  ),
+                ),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _searchPill() {
-    final c = context.colors;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-      child: Container(
-        height: 36,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(
-          color: c.searchFill,
-          borderRadius: BorderRadius.circular(9),
-        ),
-        child: Row(
-          children: [
-            AppIcon(
-              HeroAppIcons.magnifyingGlass,
-              size: 16,
-              color: c.textTertiary,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              AppStringKeys.topicChatSearch.l10n(context),
-              style: TextStyle(fontSize: 14, color: c.textTertiary),
-            ),
-          ],
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _showAddMenu,
+                child: SizedBox(
+                  width: AppMetric.hitTarget,
+                  height: AppMetric.hitTarget,
+                  child: AppIcon(
+                    HeroAppIcons.userPlus,
+                    size: AppIconSize.toolbar,
+                    color: c.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -299,10 +286,10 @@ class _ContactsViewState extends State<ContactsView> {
                     children: [
                       Text(
                         labels[i],
-                        style: TextStyle(
+                        style: GoogleFonts.inter(
                           fontSize: 15,
                           fontWeight: _tab == i
-                              ? FontWeight.w600
+                              ? FontWeight.w700
                               : FontWeight.w500,
                           color: c.textPrimary,
                         ),
@@ -380,7 +367,7 @@ class _ContactsViewState extends State<ContactsView> {
                           contact.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 16, color: c.textPrimary),
+                          style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: c.textPrimary),
                         ),
                         if (contact.statusText.isNotEmpty) ...[
                           const SizedBox(height: 3),
@@ -388,8 +375,9 @@ class _ContactsViewState extends State<ContactsView> {
                             contact.statusText.l10n(context),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
+                            style: GoogleFonts.inter(
                               fontSize: 13,
+                              fontWeight: FontWeight.w400,
                               color: c.textSecondary,
                             ),
                           ),
@@ -445,7 +433,7 @@ class _ContactsViewState extends State<ContactsView> {
                     contact.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 16, color: c.textPrimary),
+                    style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: c.textPrimary),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -522,7 +510,7 @@ class _ContactsViewState extends State<ContactsView> {
                       group.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 16, color: c.textPrimary),
+                      style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: c.textPrimary),
                     ),
                   ),
                 ],
