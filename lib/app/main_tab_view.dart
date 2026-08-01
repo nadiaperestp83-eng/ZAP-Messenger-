@@ -10,6 +10,8 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -1014,72 +1016,92 @@ class _ClassicTabBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    return Container(
-      decoration: BoxDecoration(
-        color: c.navBar,
-        border: Border(top: BorderSide(color: c.divider, width: 0.5)),
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        0,
+        16,
+        8 + MediaQuery.of(context).padding.bottom,
       ),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: 62,
-          child: Row(
-            children: [
-              for (var i = 0; i < items.length; i++)
-                Expanded(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => onSelect(i),
-                    child: Center(
-                      child: SizedBox(
-                        width: 64,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            SizedBox(
-                              width: 36,
-                              height: 28,
-                              child: Stack(
-                                clipBehavior: Clip.none,
-                                alignment: Alignment.center,
-                                children: [
-                                  AppIcon(
-                                    items[i].icon,
-                                    size: 24,
-                                    color: selection == i
-                                        ? AppTheme.brand
-                                        : c.textTertiary,
-                                  ),
-                                  if (i == 0 && unread > 0)
-                                    Positioned(
-                                      right: -14,
-                                      top: -2,
-                                      child: UnreadBadge(
-                                        count: unread,
-                                        onClear: onClearUnread,
-                                      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+          child: Container(
+            height: 62,
+            decoration: BoxDecoration(
+              color: c.navBar.withValues(alpha: 0.72),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.14),
+                width: 0.6,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.10),
+                  blurRadius: 18,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                for (var i = 0; i < items.length; i++)
+                  Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => onSelect(i),
+                      child: Center(
+                        child: SizedBox(
+                          width: 64,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SizedBox(
+                                width: 36,
+                                height: 28,
+                                child: Stack(
+                                  clipBehavior: Clip.none,
+                                  alignment: Alignment.center,
+                                  children: [
+                                    AppIcon(
+                                      items[i].icon,
+                                      size: 24,
+                                      color: selection == i
+                                          ? AppTheme.brand
+                                          : c.textTertiary,
                                     ),
-                                ],
+                                    if (i == 0 && unread > 0)
+                                      Positioned(
+                                        right: -14,
+                                        top: -2,
+                                        child: UnreadBadge(
+                                          count: unread,
+                                          onClear: onClearUnread,
+                                        ),
+                                      ),
+                                  ],
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              items[i].label.l10n(context),
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: selection == i
-                                    ? AppTheme.brand
-                                    : c.textTertiary,
+                              const SizedBox(height: 2),
+                              Text(
+                                items[i].label.l10n(context),
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: selection == i
+                                      ? AppTheme.brand
+                                      : c.textTertiary,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
