@@ -411,6 +411,7 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
                 : 0.0;
         return Stack(
           children: [
+            Positioned.fill(child: Container(color: context.colors.background)),
             Positioned.fill(
               child: Padding(
                 padding: EdgeInsets.only(bottom: reservedBottom),
