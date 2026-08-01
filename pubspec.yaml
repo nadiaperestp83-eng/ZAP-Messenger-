@@ -1,7 +1,7 @@
 name: mithka
 description: "ZapZap — a cross-platform Telegram client (Flutter), built on TDLib."
 publish_to: 'none'
-version: 0.7.0+281
+version: 2.7.26+1
 
 environment:
   sdk: ^3.12.2
