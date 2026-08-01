@@ -397,19 +397,46 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
       animation: _tabBar,
       builder: (context, _) {
         final showTabBar = _tabBar.depth(activeTabIndex) == 0;
-        return Column(
+        // Reserve room at the bottom of the content equal to the floating
+        // tab bar's own footprint (height + its margin), so the last row of
+        // whichever tab is showing never sits hidden underneath it — while
+        // the tab bar itself, being the last item in this Stack, still
+        // overlaps and blurs whatever scrolls behind it for a real glass
+        // effect (not just a flat-colored block).
+        const barHeight = 62.0;
+        const barBottomMargin = 8.0;
+        final reservedBottom =
+            showTabBar
+                ? barHeight + barBottomMargin + MediaQuery.of(context).padding.bottom
+                : 0.0;
+        return Stack(
           children: [
-            Expanded(child: _musicAwareContent(_stack(tabs))),
-            _fixedMusicPlayer(safeBottom: !showTabBar),
+            Positioned.fill(
+              child: Padding(
+                padding: EdgeInsets.only(bottom: reservedBottom),
+                child: _musicAwareContent(_stack(tabs)),
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: reservedBottom - barBottomMargin,
+              child: _fixedMusicPlayer(safeBottom: !showTabBar),
+            ),
             if (showTabBar)
-              AnimatedBuilder(
-                animation: _unread,
-                builder: (context, _) => _ClassicTabBar(
-                  selection: selection,
-                  onSelect: _select,
-                  items: tabs,
-                  onClearUnread: _chatListController.markAllRead,
-                  unread: _unread.countFor(theme.unreadBadgeMode),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: AnimatedBuilder(
+                  animation: _unread,
+                  builder: (context, _) => _ClassicTabBar(
+                    selection: selection,
+                    onSelect: _select,
+                    items: tabs,
+                    onClearUnread: _chatListController.markAllRead,
+                    unread: _unread.countFor(theme.unreadBadgeMode),
+                  ),
                 ),
               ),
           ],
@@ -1030,17 +1057,17 @@ class _ClassicTabBar extends StatelessWidget {
           child: Container(
             height: 62,
             decoration: BoxDecoration(
-              color: c.navBar.withValues(alpha: 0.72),
+              color: c.navBar.withValues(alpha: 0.62),
               borderRadius: BorderRadius.circular(28),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.14),
+                color: c.divider.withValues(alpha: 0.5),
                 width: 0.6,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.10),
-                  blurRadius: 18,
-                  offset: const Offset(0, 6),
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
                 ),
               ],
             ),
