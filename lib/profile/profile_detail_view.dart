@@ -13,6 +13,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:mithka/l10n/app_localizations.dart';
@@ -97,6 +98,9 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
   bool _musicPressed = false;
   bool _hideIdentity = false;
   bool _muted = false;
+  bool _editingUsername = false;
+  final _usernameFieldController = TextEditingController();
+  final _usernameFocus = FocusNode();
   bool _isMe = false;
   bool _isContact = true;
   bool _isBlocked = false;
@@ -121,6 +125,8 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
   void dispose() {
     _wallpaperController.removeListener(_onWallpaperChanged);
     _musicPlayer.dispose();
+    _usernameFieldController.dispose();
+    _usernameFocus.dispose();
     super.dispose();
   }
 
@@ -258,6 +264,31 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
 
   void _call(bool isVideo) =>
       context.read<CallManager>().startCall(widget.userId, isVideo);
+
+  void _startEditingUsername() {
+    _usernameFieldController.text = _username ?? '';
+    setState(() => _editingUsername = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _usernameFocus.requestFocus();
+    });
+  }
+
+  Future<void> _saveUsername() async {
+    final value = _usernameFieldController.text.trim();
+    setState(() => _editingUsername = false);
+    if (value == (_username ?? '')) return;
+    try {
+      await TdClient.shared.query({'@type': 'setUsername', 'username': value});
+      if (mounted) setState(() => _username = value);
+    } catch (_) {
+      if (mounted) {
+        showToast(
+          context,
+          AppStrings.t(AppStringKeys.editProfileUsernameUnavailable),
+        );
+      }
+    }
+  }
 
   Future<void> _toggleMute() async {
     final cid = _chatId;
@@ -1067,16 +1098,85 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _nameLine(),
-                      if (usernameText.isNotEmpty) ...[
+                      if (_isMe && _editingUsername) ...[
                         const SizedBox(height: 3),
-                        Text(
-                          usernameText,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                            color: AppTheme.brand,
+                        Row(
+                          children: [
+                            Text(
+                              '@',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                                color: AppTheme.brand,
+                              ),
+                            ),
+                            Expanded(
+                              child: TextField(
+                                controller: _usernameFieldController,
+                                focusNode: _usernameFocus,
+                                autofocus: true,
+                                keyboardType: TextInputType.visiblePassword,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppTheme.brand,
+                                ),
+                                decoration: const InputDecoration(
+                                  isDense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  border: InputBorder.none,
+                                ),
+                                onSubmitted: (_) =>
+                                    unawaited(_saveUsername()),
+                                onTapOutside: (_) =>
+                                    unawaited(_saveUsername()),
+                              ),
+                            ),
+                            GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () => unawaited(_saveUsername()),
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 6),
+                                child: AppIcon(
+                                  HeroAppIcons.check,
+                                  size: 16,
+                                  color: AppTheme.brand,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ] else if (usernameText.isNotEmpty || _isMe) ...[
+                        const SizedBox(height: 3),
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: _isMe ? _startEditingUsername : null,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  usernameText.isNotEmpty
+                                      ? usernameText
+                                      : 'Definir username',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppTheme.brand,
+                                  ),
+                                ),
+                              ),
+                              if (_isMe) ...[
+                                const SizedBox(width: 4),
+                                AppIcon(
+                                  HeroAppIcons.pen,
+                                  size: 12,
+                                  color: AppTheme.brand.withValues(alpha: 0.7),
+                                ),
+                              ],
+                            ],
                           ),
                         ),
                       ],
@@ -1235,11 +1335,8 @@ class _ProfileDetailViewState extends State<ProfileDetailView> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            ImageFiltered(
-              imageFilter: ui.ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-              child: TDImage(photo: _photo, cornerRadius: 0),
-            ),
-            Container(color: Colors.black.withValues(alpha: 0.18)),
+            TDImage(photo: _photo, cornerRadius: 0),
+            Container(color: Colors.black.withValues(alpha: 0.10)),
           ],
         ),
       );
