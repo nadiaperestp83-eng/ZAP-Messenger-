@@ -102,21 +102,19 @@ Release builds are signed with the project's upload key when
 `android/key.properties` (and the referenced keystore) are present; otherwise a
 debug signature is used. Neither the keystore nor `key.properties` is committed.
 
-## CI
+## Rules and License
 
-`master` does not build Android packages. At 00:00 and 12:00 UTC each day,
-GitHub Actions merges new `master` commits into `nightly` and increments the
-app's patch version once; `nightly` publishes dated GitHub prereleases and
-submits the signed AAB to Google Play Open testing. Xcode Cloud keeps the same
-major/minor version but forces the iOS patch to `0`. Pushes to `release` publish
-dated stable GitHub releases and submit the production AAB to Google Play
-through the same channel-aware workflow.
-`secrets.dart` is generated on the runner from the `TELEGRAM_API_ID` /
-`TELEGRAM_API_HASH` repository secrets.
+Em complemento aos termos e condições da Licença Pública Geral GNU (GPLv3), aplicam-se as seguintes restrições adicionais relativas ao uso comercial:
+
+PROIBIÇÃO DE USO COMERCIAL: Fica expressamente proibida a utilização, redistribuição, reempacotamento ou comercialização deste software (no todo ou em partes) para fins lucrativos, comerciais ou monetização direta/indireta (incluindo vendas em lojas de aplicativos com cobrança, inserção de anúncios pagos, ou oferecimento como serviço proprietário pago).
+
+PERMISSÃO NÃO COMERCIAL (NON-COMMERCIAL): O fork, a cópia, a modificação e a redistribuição são totalmente livres e permitidos exclusivamente para fins não comerciais, educacionais, pessoais ou comunitários, desde que mantidos os créditos aos autores originais e que o código modificado permaneça sob esta mesma licença restritiva.
+
+PREVALÊNCIA: Em caso de conflito entre os termos padrão da GPLv3 e esta Cláusula Adicional de Restrição Comercial, prevalecerá sempre a restrição de proibição de uso comercial descrita nos itens 1 e 2 acima.
 
 ## License & credits
 
-ZapZap follow same Mithka is licensed under the [BSD 3-Clause License](LICENSE).
+ZapZap follow same Mithka is licensed under the [BSD 3-Clause License](LICENSE) and Rules
 
 TDLib and the components under `third_party/` retain their own licenses. Mithka
 ships no third-party app's proprietary assets or trademarks.
