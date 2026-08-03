@@ -108,26 +108,19 @@ class _ProfileTabViewState extends State<ProfileTabView> {
     final c = context.colors;
     return Container(
       color: c.groupedBackground,
-      child: SafeArea(
-        bottom: false,
-        child: ListView(
-          padding: const EdgeInsets.only(bottom: 100),
-          children: [
-            _topBar(),
-            const SizedBox(height: 12),
-            _identity(),
-            const SizedBox(height: 20),
-            _actionCardsRow(),
-            const SizedBox(height: 16),
-            _phoneCard(),
-            const SizedBox(height: 16),
-            _card(child: _shortcutRows()),
-            const SizedBox(height: 20),
-            _postsSection(),
-            const SizedBox(height: 20),
-            _card(child: _accountsCard()),
-          ],
-        ),
+      child: ListView(
+        padding: const EdgeInsets.only(bottom: 100),
+        children: [
+          _coverHeader(),
+          const SizedBox(height: 16),
+          _phoneCard(),
+          const SizedBox(height: 16),
+          _card(child: _shortcutRows()),
+          const SizedBox(height: 20),
+          _postsSection(),
+          const SizedBox(height: 20),
+          _card(child: _accountsCard()),
+        ],
       ),
     );
   }
@@ -164,66 +157,126 @@ class _ProfileTabViewState extends State<ProfileTabView> {
     );
   }
 
-  Widget _identity() {
+  Widget _coverHeader() {
     final c = context.colors;
     final user = _vm.user;
-    return Column(
-      children: [
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: _openMyProfile,
-          child: PhotoAvatar(
-            title: user?.name ?? AppStrings.t(AppStringKeys.chatMeLabel),
-            photo: user?.photo,
-            size: 96,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          user?.name ?? AppStrings.t(AppStringKeys.contactsLoading),
-          style: GoogleFonts.inter(
-            fontSize: 22,
-            fontWeight: FontWeight.w700,
-            color: c.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 3),
-        Text(
-          telegramPresenceText(TelegramPresenceLabel.online),
-          style: GoogleFonts.inter(fontSize: 14, color: c.textSecondary),
-        ),
-      ],
-    );
-  }
-
-  // MARK: - Quick action cards
-
-  Widget _actionCardsRow() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
+    return SizedBox(
+      height: 460,
+      child: Stack(
+        fit: StackFit.expand,
         children: [
-          Expanded(
-            child: _actionCard(
-              icon: HeroAppIcons.camera,
-              label: 'Definir Foto',
-              onTap: _editPhoto,
+          Positioned.fill(
+            child: user?.photo != null
+                ? PhotoAvatar(
+                    title: user?.name ?? '',
+                    photo: user?.photo,
+                    size: 460,
+                    square: true,
+                  )
+                : Container(color: c.groupedBackground),
+          ),
+          // Scrim so the white text/buttons stay readable over any photo.
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.transparent,
+                    Colors.black.withValues(alpha: 0.55),
+                  ],
+                  stops: const [0.45, 1.0],
+                ),
+              ),
             ),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: _actionCard(
-              icon: HeroAppIcons.penToSquare,
-              label: 'Editar Informações',
-              onTap: _editInfo,
+          Positioned(
+            left: 12,
+            top: 8 + MediaQuery.of(context).padding.top,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _root.push(
+                MaterialPageRoute(
+                  builder: (_) => QRCodeView(
+                    name: user?.name ?? AppStrings.t(AppStringKeys.chatMeLabel),
+                  ),
+                ),
+              ),
+              child: const SizedBox(
+                width: AppMetric.hitTarget,
+                height: AppMetric.hitTarget,
+                child: AppIcon(
+                  HeroAppIcons.qrcode,
+                  size: AppIconSize.toolbar,
+                  color: Colors.white,
+                ),
+              ),
             ),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: _actionCard(
-              icon: HeroAppIcons.gear,
-              label: 'Configurações',
-              onTap: _openSettings,
+          Positioned(
+            left: 20,
+            right: 20,
+            bottom: 108,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _openMyProfile,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    user?.name ?? AppStrings.t(AppStringKeys.contactsLoading),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    telegramPresenceText(TelegramPresenceLabel.online),
+                    style: GoogleFonts.inter(
+                      fontSize: 15,
+                      color: Colors.white.withValues(alpha: 0.85),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 20,
+            child: Row(
+              children: [
+                Expanded(
+                  child: _overlayActionButton(
+                    icon: HeroAppIcons.camera,
+                    label: 'Definir Foto',
+                    onTap: _editPhoto,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _overlayActionButton(
+                    icon: HeroAppIcons.penToSquare,
+                    label: 'Editar Informações',
+                    onTap: _editInfo,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _overlayActionButton(
+                    icon: HeroAppIcons.gear,
+                    label: 'Configurações',
+                    onTap: _openSettings,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -231,35 +284,38 @@ class _ProfileTabViewState extends State<ProfileTabView> {
     );
   }
 
-  Widget _actionCard({
+  Widget _overlayActionButton({
     required AppIconData icon,
     required String label,
     required VoidCallback onTap,
   }) {
-    final c = context.colors;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
         decoration: BoxDecoration(
-          color: c.card,
+          color: Colors.black.withValues(alpha: 0.32),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AppIcon(icon, size: 22, color: c.textPrimary),
-            const SizedBox(height: 8),
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: AppIcon(icon, size: 24, color: Colors.white),
+            ),
+            const SizedBox(height: 6),
             Text(
               label,
               textAlign: TextAlign.center,
-              maxLines: 2,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.inter(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
-                color: c.textPrimary,
+                color: Colors.white,
               ),
             ),
           ],
