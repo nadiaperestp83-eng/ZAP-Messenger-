@@ -26,6 +26,7 @@ import '../components/app_icons.dart';
 import '../components/confirm_dialog.dart';
 import '../components/photo_avatar.dart';
 import '../components/ui_components.dart';
+import '../l10n/telegram_language_controller.dart';
 import '../settings/edit_profile_view.dart';
 import '../settings/settings_view.dart';
 import '../theme/app_theme.dart';
