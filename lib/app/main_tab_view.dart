@@ -8,6 +8,7 @@
 //
 
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'dart:ui';
@@ -29,6 +30,7 @@ import '../components/ui_components.dart';
 import '../contacts/contacts_view.dart';
 import '../l10n/app_localizations.dart';
 import '../moments/moments_view.dart';
+import '../profile/profile_tab_view.dart';
 import '../profile/profile_view.dart';
 import '../settings/topic_group_display_mode.dart';
 import '../tdlib/json_helpers.dart';
@@ -155,7 +157,7 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
   }
 
   late final List<GlobalKey<NavigatorState>> _navKeys = List.generate(
-    4,
+    5,
     (_) => GlobalKey<NavigatorState>(),
   );
 
@@ -164,6 +166,7 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
     _MainTabItem(1, AppStringKeys.tabChannels, HeroAppIcons.hashtag),
     _MainTabItem(2, AppStringKeys.tabContacts, HeroAppIcons.users),
     _MainTabItem(3, AppStringKeys.tabMoments, HeroAppIcons.circleNotch),
+    _MainTabItem(4, AppStringKeys.chatMeLabel, HeroAppIcons.circleUser),
   ];
 
   List<_MainTabItem> _visibleTabs(ThemeController theme) => [
@@ -171,13 +174,15 @@ abstract class _MainRootViewState<T extends StatefulWidget> extends State<T> {
     if (theme.showChannelsTab) _allTabs[1],
     _allTabs[2],
     if (theme.showMomentsTab) _allTabs[3],
+    _allTabs[4],
   ];
 
   Widget _root(int i) => switch (i) {
     0 => ChatListView(controller: _chatListController),
     1 => const TopicChannelsView(),
     2 => const ContactsView(),
-    _ => const MomentsView(),
+    3 => const MomentsView(),
+    _ => const ProfileTabView(),
   };
 
   Future<bool> _onWillPop() async {
@@ -1077,13 +1082,58 @@ class _ClassicTabBar extends StatelessWidget {
                                   clipBehavior: Clip.none,
                                   alignment: Alignment.center,
                                   children: [
-                                    AppIcon(
-                                      items[i].icon,
-                                      size: 24,
-                                      color: selection == i
-                                          ? AppTheme.brand
-                                          : c.textTertiary,
-                                    ),
+                                    if (items[i].index == 4)
+                                      Consumer<AccountStore>(
+                                        builder: (context, accounts, _) {
+                                          final active = accounts.summaries
+                                              .where(
+                                                (s) =>
+                                                    s.slot ==
+                                                    accounts.activeSlot,
+                                              );
+                                          final avatarPath = active.isEmpty
+                                              ? null
+                                              : active.first.avatarPath;
+                                          final ring = Border.all(
+                                            color: selection == i
+                                                ? AppTheme.brand
+                                                : Colors.transparent,
+                                            width: 1.6,
+                                          );
+                                          if (avatarPath != null &&
+                                              avatarPath.isNotEmpty) {
+                                            return Container(
+                                              width: 24,
+                                              height: 24,
+                                              decoration: BoxDecoration(
+                                                shape: BoxShape.circle,
+                                                border: ring,
+                                              ),
+                                              child: ClipOval(
+                                                child: Image.file(
+                                                  File(avatarPath),
+                                                  fit: BoxFit.cover,
+                                                ),
+                                              ),
+                                            );
+                                          }
+                                          return AppIcon(
+                                            items[i].icon,
+                                            size: 24,
+                                            color: selection == i
+                                                ? AppTheme.brand
+                                                : c.textTertiary,
+                                          );
+                                        },
+                                      )
+                                    else
+                                      AppIcon(
+                                        items[i].icon,
+                                        size: 24,
+                                        color: selection == i
+                                            ? AppTheme.brand
+                                            : c.textTertiary,
+                                      ),
                                     if (i == 0 && unread > 0)
                                       Positioned(
                                         right: -14,
